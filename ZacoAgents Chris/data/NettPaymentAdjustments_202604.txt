@@ -1,0 +1,17 @@
+    Report                                                    Zaco Agents (Pty) Ltd (20026)
+    Report:   Nett Payment Adjustments                           Run Date: 2026/05/04 20:40:41
+    Market:   ALL
+    Agent:    ALL
+    Date Range: 2026/04/01 - 2026/04/30
+
+    Subtropico (Jhb)
+        Supplier Ref AccSale Number Date Gross Payments Total Deductions Deduction Vat Nett Payments Calc Nett Adj Nett Adjustment
+      20026*14705 & 14706 JOH*SUB*5640001/12026-04-13 R 6 000.00 R 782.61 R 117.39 R 5 100.00 R 0.00 R 0.00 R 0.00
+    Total                                R 6 000.00 R 782.61  R 117.39  R 5 100.00    R 0.00      R 0.00   R 0.00
+      20026*14705 & 14706 JOH*SUB*5640001/22026-04-15 R 3 800.00 R 495.65 R 74.35 R 3 230.00 R 0.00 R 0.00 R 0.00
+
+    TSHWANE MARKET                         Farmers Trust (Pre)
+        Supplier Ref AccSale Number Date Gross Payments Total Deductions Deduction Vat Nett Payments Calc Nett Adj Nett Adjustment
+        20026*14700 PRE*BT*380101 2026-04-01 R 2 700.00 R 352.17 R 52.83 R 2 295.00   R 0.00      R 0.00   R 0.00
+        14013*14703 PRE*BT*380102 2026-04-01 R 60.00 R 7.83    R 1.17     R 51.00     R 0.00      R 0.00   R 0.00
+

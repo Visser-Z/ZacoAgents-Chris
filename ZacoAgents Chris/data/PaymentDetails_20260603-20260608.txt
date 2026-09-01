@@ -1,0 +1,69 @@
+    Report                                              Zaco Agents (Pty) Ltd (20026)
+    Report:   Payment Details                               Run Date: 2026/06/09 19:02:00
+    Market:   ALL
+    Agent:    ALL
+    Date Range: 2026/06/03 - 2026/06/08
+
+    JOBURG MKT - TFRESH                         Subtropico (Jhb)
+                                             Nett    Total   Deduction Gross Pay.
+     FMS ID   Supplier Ref AccSale Number Date
+                                            Payments Deductions Vat  Payments Ref
+
+     203471   20026*14880 JOH*SUB*5644210/1 2026-06-03 R 1,275.00 R 195.65 R 29.35 R 1 500.00 EFT
+
+     Line No              Commodity                Delivered Sold     Sales Total
+          ORANGES VALENCIA CLASS 1 MEDIUM STANDARD CARTON 15kg
+    203471                                           200       50        R 1,500.00
+                                                                       R 1,500.00
+
+    TSHWANE MARKET                         Farmers Trust (Pre)
+                                             Nett    Total   Deduction Gross Pay.
+     FMS ID   Supplier Ref AccSale Number Date
+                                            Payments Deductions Vat  Payments Ref
+
+     203472   20026*14720 PRE*BT*382860 2026-06-03 R 170.00 R 26.09 R 3.91 R 200.00 EFT
+
+     Line No              Commodity                Delivered Sold     Sales Total
+          CHERRIES OTHER CLASS 1 LARGE (HALF TRAY 2.5kg)
+    203472                                           14       1        R 200.00
+                                                                       R 200.00
+
+     203473   20026*14885 PRE*BT*382880 2026-06-05 R 250.00 R 43.48 R 6.52 R 300.00 EFT
+
+     Line No              Commodity                Delivered Sold     Sales Total
+          PEARS PACKHAMS CLASS 1 MEDIUM STANDARD CARTON 12.5kg
+    203473                                           2       2        R 100.00
+          PEACHES CLASS 1 MEDIUM STANDARD TRAY 5kg
+    203473                                           2       2        R 100.00
+          STRAWBERRIES CLASS 1 PUNNET 250g
+    203473                                           5       5        R 100.00
+                                                                       R 300.00
+
+     203474   20026*14891 PRE*BT*382885 2026-06-06 R 3,060.00 R 469.57 R 70.43 R 3 600.00 EFT
+
+     Line No              Commodity                Delivered Sold     Sales Total
+          GRAPEFRUIT STAR RUBY CLASS 1 MEDIUM STANDARD CARTON 15kg
+    203474                                           60       40        R 3,600.00
+                                                                       R 3,600.00
+
+    JOBURG MKT - TFRESH                         Subtropico (Jhb)
+                                             Nett    Total   Deduction Gross Pay.
+     FMS ID   Supplier Ref AccSale Number Date
+                                            Payments Deductions Vat  Payments Ref
+
+     203475   20026*14892 PRE*BT*382886 2026-06-06 R 2,550.00 R 391.30 R 58.70 R 3 000.00 EFT
+
+     Line No              Commodity                Delivered Sold     Sales Total
+          AVOCADOS HASS CLASS 1 COUNT 18 STANDARD CARTON 4kg
+    203475                                           25       25        R 3,000.00
+                                                                       R 3,000.00
+
+     203476   20026*14880 JOH*SUB*5644211/1 2026-06-08 R 765.00 R 117.39 R 17.61 R 900.00 EFT
+
+     Line No              Commodity                Delivered Sold     Sales Total
+          ORANGES VALENCIA CLASS 1 MEDIUM STANDARD CARTON 15kg
+    203476                                           200       30        R 900.00
+                                                                       R 900.00
+
+     203477   20026*14890 PRE*BT*382999 2026-06-05 R 207.30 R 45.83 R 6.87 R 260.00 EFT
+

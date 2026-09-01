@@ -1,0 +1,59 @@
+    Consignment Reports                                Zaco Agents (Pty) Ltd (20026)
+
+    Report:   Daily Sales Detail                          Run Date: 2026/06/09 09:14:02
+
+    Market:                                                                       
+    Agent:                                                                        
+    Product:  ALL                                                                 
+    Date Range: 2026/05/25 - 2026/05/31                                           
+
+    TSHWANE MARKET      Farmers Trust (Pre)                                   
+    Delivery ID: 1180699Z Supplier Ref: 20026*14720 Qty Sent: 14 Qty Amended To: Qty Avail: 14
+    Consignment ID: 118069901Z Comment:
+    Product:  CHERRIES OTHER CLASS 1 LARGE (HALF TRAY 2.5kg)
+      Date Sold  Docket Number Qty Sold Market Avg     Price       Sales Value    
+    2026-05-27 PRE*B6E01C39001*01Z  3        R 0.00         R 200.00     R 600.00   
+    2026-05-28 PRE*B6E02C39002*01Z  -1        R 0.00         R 200.00     R -200.00   
+                                    2                                   R 400.00   
+
+    TSHWANE MARKET      Farmers Trust (Pre)                                   
+    Delivery ID: 1181705Z Supplier Ref:  Qty Sent: 71 Qty Amended To: Qty Avail: 70
+    Consignment ID: 118170502Z Comment:
+    Product:  NECTARINES OTHER CLASS 1 MEDIUM MULTI LAYER TRAYER 11kg
+      Date Sold  Docket Number Qty Sold Market Avg     Price       Sales Value    
+    2026-05-27 PRE*B6E01C39001*02Z  40        R 0.00         R 50.00     R 2,000.00   
+    2026-05-30 PRE*B6E02C39002*02Z  25        R 0.00         R 60.00     R 1,500.00   
+                                    65                                   R 3,500.00   
+
+    JOBURG MKT - TFRESH      Subtropico (Jhb)                                 
+    Delivery ID: 1182465Z Supplier Ref: 14013*14710 Qty Sent: 100 Qty Amended To: Qty Avail: 100
+    Consignment ID: 118246503Z Comment:
+    Product:  GRAPES CRIMSON SEEDLESS CLASS 2 NO SIZE (PUNNET 5kg) 10
+      Date Sold  Docket Number Qty Sold Market Avg     Price       Sales Value    
+    2026-05-28 PRE*B6E01C39001*03Z  60        R 0.00         R 80.00     R 4,800.00   
+                                    60                                   R 4,800.00   
+
+    TSHWANE MARKET      Farmers Trust (Pre)                                   
+    Delivery ID: 1183001Z Supplier Ref: 20026*14013 Qty Sent: 40 Qty Amended To: Qty Avail: 40
+    Consignment ID: 118300104Z Comment:
+    Product:  PLUM ANGELINO CLASS 1 MEDIUM STANDARD TRAY 5kg
+      Date Sold  Docket Number Qty Sold Market Avg     Price       Sales Value    
+    2026-05-29 PRE*B6E01C39001*04Z  38        R 0.00         R 70.00     R 2,660.00   
+                                    38                                   R 2,660.00   
+
+    TSHWANE MARKET      Farmers Trust (Pre)                                   
+    Delivery ID: 1183050Z Supplier Ref: 20026*20026 Qty Sent: 30 Qty Amended To: Qty Avail: 30
+    Consignment ID: 118305005Z Comment:
+    Product:  APPLES GOLDEN DELICIOUS CLASS 1 LARGE STANDARD CARTON 12.5kg
+      Date Sold  Docket Number Qty Sold Market Avg     Price       Sales Value    
+    2026-05-30 PRE*B6E01C39001*05Z  30        R 0.00         R 45.00     R 1,350.00   
+                                    30                                   R 1,350.00   
+
+    JOBURG MKT - TFRESH      Subtropico (Jhb)                                 
+    Delivery ID: 1183120Z Supplier Ref: 20026*14880 Qty Sent: 200 Qty Amended To: Qty Avail: 200
+    Consignment ID: 118312006Z Comment:
+    Product:  ORANGES VALENCIA CLASS 1 MEDIUM STANDARD CARTON 15kg
+      Date Sold  Docket Number Qty Sold Market Avg     Price       Sales Value    
+    2026-05-31 PRE*B6E01C39001*06Z  50        R 0.00         R 30.00     R 1,500.00   
+                                    50                                   R 1,500.00   
+

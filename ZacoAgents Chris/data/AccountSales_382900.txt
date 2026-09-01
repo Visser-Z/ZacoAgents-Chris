@@ -1,0 +1,49 @@
+    VAT Reg. No. 4250103472                                     AFREKENINGSTAAT   
+    P.O. BOX/POSBUS 1539                                                          
+                                                                ACCOUNT SALES     
+    PRETORIA 0001                                                                 
+                                                               BELASTINGFAKTUUR   
+    TEL: (012) 323 2000                                           TAX INVOICE     
+                                                                                  
+    AGENT VAT REGISTRATION NUMBER: 4250103472                                     
+                                                                                  
+                              TAX INVOICE                                         
+                                BT382900     ACCOUNT SALES NO : 382900            
+                                                                                  
+    PRODUCER : 038979 k2024700521 trading as Zaco DATE : 01/06/2026 Page: 1       
+             EGYPT                                                                
+                                             DELIVERY NOTE NO : 203500            
+             0148                                     REFNO :    14013            
+    Vat Reg No :                               DATE RECEIVED : 28/05/2026         
+                                         PREVIOUS ACCOUNT SALES NO : 382870       
+    MARKET GRN : 20350001 QUANTITY RECEIVED : 50 QUANTITY B/F : 40                
+    PRODUCT : PLAN 2A MA53 PLUM ANGELINO SMAN : BRANDON BRONKHORST                
+                                                                                  
+    DATE      PRICES        AVER.PRICE MARKET AVG  QUANTITY      VALUE            
+    ----        ------      ---------- ----------  --------   --------            
+    29/05/2026 100.00 - 100.00  100.00    0.00          30     3000.00            
+                            ----------             --------   --------            
+                               100.00                   30     3000.00            
+    QUANTITY OUTSTANDING : 10      AGENT COMM % : 7.50                            
+                                                                                  
+    MARKET GRN : 20350002 QUANTITY RECEIVED : 60 QUANTITY B/F : 50                
+    PRODUCT : NEOT 1L MA50 36 T2 NECTARINE OTHER SMAN : BRANDON BRONKHORST        
+                                                                                  
+    DATE      PRICES        AVER.PRICE MARKET AVG  QUANTITY      VALUE            
+    ----        ------      ---------- ----------  --------   --------            
+    29/05/2026 50.00 - 50.00     50.00     0.00          20     1000.00            
+                            ----------             --------   --------            
+                                50.00                   20     1000.00            
+    QUANTITY OUTSTANDING : 30      AGENT COMM % : 7.50                            
+    ----------------------------------------------------------------------------- 
+    VAT (OUTPUT) COLLECTED                                       0.00             
+    ----------------------------------------------------------------------------- 
+                 ** FINAL PAYMENT **     ** TOTAL SOLD ** 50                      
+    COSTS                                               CURRENT SALES             
+    -----                                                ------------             
+    DEDUCTION          AMOUNT VAT (INPUT) TOTAL                                   
+    ---------         -------- --------- --------                                 
+    MARKET FEES        200.00     30.00   230.00 GROSS AMOUNT 4000.00             
+    PLUMS LEVY          40.00      6.00    46.00                                  
+    ----------------------------------------------------------------------------- 
+                                                 NETT AMOUNT   3724.00            

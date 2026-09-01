@@ -1,0 +1,38 @@
+    VAT Reg. No. 4250103472                                     AFREKENINGSTAAT   
+    P.O. BOX/POSBUS 1539                                                          
+                                                                ACCOUNT SALES     
+    PRETORIA 0001                                                                 
+                                                               BELASTINGFAKTUUR   
+    TEL: (012) 323 2000                                           TAX INVOICE     
+                                                                                  
+    AGENT VAT REGISTRATION NUMBER: 4250103472                                     
+                                                                                  
+                              TAX INVOICE                                         
+                                BT382405     ACCOUNT SALES NO : 382405            
+                                                                                  
+    PRODUCER : 038979 k2024700521 trading as Zaco DATE : 29/05/2026 Page: 1       
+             EGYPT                                                                
+                                             DELIVERY NOTE NO : 203003            
+             0148                                     REFNO :    14720            
+    Vat Reg No :                               DATE RECEIVED : 27/05/2026         
+                                         PREVIOUS ACCOUNT SALES NO : 382399       
+    MARKET GRN : 20344702 QUANTITY RECEIVED : 14 QUANTITY B/F : 14                
+    PRODUCT : CHOT 1L HT25 CHERRY OTHER SMAN : BRANDON BRONKHORST                 
+                                                                                  
+    DATE      PRICES        AVER.PRICE MARKET AVG  QUANTITY      VALUE            
+    ----        ------      ---------- ----------  --------   --------            
+    27/05/2026 200.00 - 200.00  200.00    0.00           2      400.00            
+                            ----------             --------   --------            
+                               200.00                    2      400.00            
+    QUANTITY OUTSTANDING : 12      AGENT COMM % : 7.50                            
+    ----------------------------------------------------------------------------- 
+    VAT (OUTPUT) COLLECTED                                       0.00             
+    ----------------------------------------------------------------------------- 
+                 ** FINAL PAYMENT **     ** TOTAL SOLD ** 2                       
+    COSTS                                               CURRENT SALES             
+    -----                                                ------------             
+    DEDUCTION          AMOUNT VAT (INPUT) TOTAL                                   
+    ---------         -------- --------- --------                                 
+    MARKET FEES         52.17      7.83    60.00 GROSS AMOUNT 400.00              
+    ----------------------------------------------------------------------------- 
+                                                 NETT AMOUNT    340.00            
