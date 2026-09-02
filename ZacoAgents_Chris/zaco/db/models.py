@@ -134,6 +134,9 @@ class Round(Base):
         # the earlier round it duplicates -- so the path has to be named.
         foreign_keys="RoundDocument.round_id",
     )
+    events: Mapped[list[RoundEvent]] = relationship(
+        back_populates="round", cascade="all, delete-orphan", order_by="RoundEvent.id"
+    )
     created_by: Mapped[User | None] = relationship(foreign_keys=[created_by_id])
     resolved_by: Mapped[User | None] = relationship(foreign_keys=[resolved_by_id])
 
@@ -163,7 +166,58 @@ class RoundDocument(Base):
     and the round summary says so out loud (D12).
     """
 
+    withdrawn_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    withdrawn_reason: Mapped[str] = mapped_column(Text, default="")
+    withdrawn_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), default=None)
+    """Set when an operator took this document back out of the round.
+
+    A file that is genuinely one of the five kinds -- another business's export, last quarter's
+    run, a report for a producer that is not Zaco -- is read happily by the classifier and lands
+    in the round, so there has to be a way out. The bytes stay: a round that once held six
+    documents and now holds five must not look like one that always held five.
+    """
+
     round: Mapped[Round] = relationship(back_populates="documents", foreign_keys=[round_id])
+    withdrawn_by: Mapped[User | None] = relationship(foreign_keys=[withdrawn_by_id])
+
+    @property
+    def is_withdrawn(self) -> bool:
+        return self.withdrawn_at is not None
+
+    @property
+    def counts(self) -> bool:
+        """Whether this document contributes anything to its round's figures."""
+        return self.withdrawn_at is None and self.duplicate_of_round_id is None
+
+
+class RoundAction(StrEnum):
+    WITHDRAWN = "document_withdrawn"
+    RESTORED = "document_restored"
+    REOPENED = "round_reopened"
+    ABANDONED = "round_abandoned"
+    DN_RELEASED = "delivery_note_released"
+
+
+class RoundEvent(Base):
+    """Something a person did to a round after it was uploaded.
+
+    `RoundDocument.withdrawn_at` holds only the current state, so a document withdrawn, restored
+    and withdrawn again would lose its middle. The reason a round was reopened, or a signed-off
+    number given back, is exactly the kind of thing somebody asks about a quarter later.
+    """
+
+    __tablename__ = "round_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    round_id: Mapped[int] = mapped_column(ForeignKey("rounds.id", ondelete="CASCADE"), index=True)
+    action: Mapped[str] = mapped_column(String(40))
+    subject: Mapped[str] = mapped_column(String(400), default="")
+    reason: Mapped[str] = mapped_column(Text, default="")
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), default=None)
+
+    round: Mapped[Round] = relationship(back_populates="events")
+    by: Mapped[User | None] = relationship()
 
 
 class ProductCode(Base):

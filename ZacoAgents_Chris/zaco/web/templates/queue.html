@@ -59,7 +59,7 @@
           <td class="mono">#${r.id}</td>
           <td>${esc(r.created_at.slice(0, 16).replace("T", " "))}</td>
           <td>${esc(r.created_by || "-")}</td>
-          <td class="num">${r.document_count}${r.duplicate_count ? ` <span class="tag">${r.duplicate_count} already read</span>` : ""}</td>
+          <td class="num">${r.document_count}${r.duplicate_count ? ` <span class="tag">${r.duplicate_count} already read</span>` : ""}${r.withdrawn_count ? ` <span class="tag">${r.withdrawn_count} removed</span>` : ""}</td>
           <td>${esc(r.status)}</td>
           <td><button class="link" data-open="${r.id}">Open</button></td>
         </tr>`).join("")}</tbody></table>`
@@ -227,6 +227,55 @@
       } catch (e) { window.alert(e.message); }
     }));
 
+    target.querySelectorAll("[data-reveal]").forEach((b) => b.addEventListener("click", () => {
+      const row = document.getElementById(b.dataset.reveal);
+      if (row) row.hidden = !row.hidden;
+    }));
+
+    target.querySelectorAll("[data-withdraw]").forEach((b) => b.addEventListener("click", async () => {
+      try {
+        await json("POST", `/api/rounds/${id}/documents/${b.dataset.withdraw}/withdraw`,
+          { reason: value(b.dataset.why) });
+        await refreshList();
+        await reload();
+      } catch (e) { window.alert(e.message); }
+    }));
+
+    target.querySelectorAll("[data-restore]").forEach((b) => b.addEventListener("click", async () => {
+      try {
+        await json("POST", `/api/rounds/${id}/documents/${b.dataset.restore}/restore`, { reason: "" });
+        await refreshList();
+        await reload();
+      } catch (e) { window.alert(e.message); }
+    }));
+
+    target.querySelectorAll("[data-release]").forEach((b) => b.addEventListener("click", async () => {
+      try {
+        await json("POST",
+          `/api/rounds/${id}/delivery-notes/${encodeURIComponent(b.dataset.release)}/release`,
+          { reason: value(b.dataset.why) });
+        await reload();
+      } catch (e) { window.alert(e.message); }
+    }));
+
+    const reopen = target.querySelector("[data-reopen]");
+    if (reopen) reopen.addEventListener("click", async () => {
+      try {
+        current = await json("POST", `/api/rounds/${id}/reopen`, { reason: value(reopen.dataset.why) });
+        await refreshList();
+        draw();
+      } catch (e) { window.alert(e.message); }
+    });
+
+    const aside = target.querySelector("[data-abandon]");
+    if (aside) aside.addEventListener("click", async () => {
+      try {
+        await json("POST", `/api/rounds/${id}/abandon`, { reason: value(aside.dataset.why) });
+        await refreshList();
+        await reload();
+      } catch (e) { window.alert(e.message); }
+    });
+
     const finish = target.querySelector("[data-resolve]");
     if (finish) finish.addEventListener("click", async () => {
       try { await json("POST", `/api/rounds/${id}/resolve`); await refreshList(); await reload(); }
@@ -249,6 +298,7 @@
   function draw() {
     const d = current;
     const t = d.totals;
+    const editable = d.summary.status === "staged";
 
     const alerts = d.alerts.length ? `
       <h2>Counted once, and said out loud <span class="muted">(${d.alerts.length})</span></h2>
@@ -286,6 +336,72 @@
           <td>${esc(n.provenance.replace(/_/g, " "))}</td>
           <td class="muted">${esc(n.operator_reason || n.reasoning)}</td>
           <td class="muted">${esc(n.approved_by || "-")}</td></tr>`).join("")}</tbody>
+      </table></div>` : "";
+
+    // A file can be readable and still not belong here: another business's payment export, or
+    // last quarter's run, is a perfectly good report and the classifier has no reason to refuse
+    // it. Removing one keeps the file and takes its figures out.
+    const size = (n) => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} kB`);
+    const docState = (f) => {
+      if (f.state === "withdrawn") return '<span class="tag">removed</span>';
+      if (f.state === "duplicate") return `<span class="tag">already read in round ${f.duplicate_of_round_id}</span>`;
+      return '<span class="muted">counted</span>';
+    };
+
+    const documents = `
+      <h2>Documents in this round
+        <span class="muted">(${d.documents.filter((f) => f.state === "counted").length} of ${d.documents.length} counted)</span></h2>
+      <p class="muted">Everything above is derived from these files and nothing else. Taking one out
+        keeps the file and the reason, and removes its figures from the round.</p>
+      <div class="panel"><table>
+        <thead><tr><th>File</th><th>Read as</th><th class="num">Size</th><th>State</th><th></th></tr></thead>
+        <tbody>${d.documents.map((f) => `
+          <tr>
+            <td class="mono"${f.state === "withdrawn" ? ' style="text-decoration:line-through"' : ""}>${esc(f.filename)}</td>
+            <td class="muted">${esc(f.kind.replace(/_/g, " "))}</td>
+            <td class="num muted">${size(f.byte_count)}</td>
+            <td>${docState(f)}</td>
+            <td>${!editable ? "" : f.state === "withdrawn"
+              ? `<button class="link" data-restore="${f.id}">Put it back</button>`
+              : `<button class="link" data-reveal="doc-${f.id}">Remove</button>`}</td>
+          </tr>
+          ${f.state === "withdrawn" ? `<tr><td colspan="5" class="muted">
+            Taken out by ${esc(f.withdrawn_by || "?")} — ${esc(f.withdrawn_reason)}</td></tr>` : ""}
+          ${editable && f.state !== "withdrawn" ? `<tr id="doc-${f.id}" hidden><td colspan="5">
+            <label for="doc-${f.id}-why">Why is this document being taken out? (required)</label>
+            <input id="doc-${f.id}-why" type="text" placeholder="e.g. this is another producer's export, uploaded by mistake">
+            <button data-withdraw="${f.id}" data-why="doc-${f.id}-why">Take it out of the round</button>
+          </td></tr>` : ""}`).join("")}
+        </tbody>
+      </table></div>`;
+
+    // An approved number is keyed on the delivery, not the round, and every number ever approved
+    // is avoided when a fresh one is minted. So a note left behind by a removal quietly holds a
+    // number out of the 14xxx series for a delivery that no longer exists.
+    const orphans = d.orphaned_delivery_notes.length ? `
+      <h2>Numbers still held <span class="muted">(${d.orphaned_delivery_notes.length})</span></h2>
+      <p class="muted">Approved for a delivery this round no longer contains. Until it is released,
+        the number stays out of the series and cannot be proposed for anything else.</p>
+      ${d.orphaned_delivery_notes.map((n, i) => `
+        <div class="panel">
+          <strong class="mono">${n.dn ? esc(n.dn) : "no DN recorded"}</strong> — approved for delivery
+          <span class="mono">${esc(n.delivery_id)}</span> by ${esc(n.approved_by || "?")}
+          <p class="muted" style="margin:.3rem 0 0">${esc(n.operator_reason || n.reasoning)}</p>
+          <label for="rel-${i}-why">Why give the number back? (required)</label>
+          <input id="rel-${i}-why" type="text" placeholder="e.g. the delivery came from a file that was removed">
+          <button data-release="${esc(n.delivery_id)}" data-why="rel-${i}-why">Release the number</button>
+        </div>`).join("")}` : "";
+
+    const history = d.events.length ? `
+      <h2>What has been done to this round</h2>
+      <div class="panel"><table>
+        <thead><tr><th>When</th><th>What</th><th>Which</th><th>Why</th><th>By</th></tr></thead>
+        <tbody>${d.events.map((e) => `<tr>
+          <td class="muted">${esc(String(e.at).slice(0, 16).replace("T", " "))}</td>
+          <td>${esc(e.action.replace(/_/g, " "))}</td>
+          <td class="mono">${esc(e.subject)}</td>
+          <td class="muted">${esc(e.reason || "-")}</td>
+          <td class="muted">${esc(e.by || "-")}</td></tr>`).join("")}</tbody>
       </table></div>` : "";
 
     const rows = `
@@ -334,20 +450,45 @@
 
       ${suspensions}
       ${alerts}
+      ${orphans}
       ${notes}
       ${rows}
       ${d.stock_notes.map((n) => `<div class="warning">${esc(n)}</div>`).join("")}
+      ${documents}
+      ${history}
 
       <div class="panel">
-        <button data-resolve ${d.is_clear && d.summary.status === "staged" ? "" : "disabled"}>
-          ${d.summary.status === "staged" ? "Close the queue" : "Queue closed"}
+        <button data-resolve ${d.is_clear && editable ? "" : "disabled"}>
+          ${editable ? "Close the queue" : "Queue closed"}
         </button>
         <p class="muted" style="font-size:.9em;margin:.5rem 0 0">
-          ${d.summary.status === "staged"
+          ${editable
             ? "Closing the queue marks this round ready for the workbook. It stays open until every question above is answered."
-            : "This round is resolved. Appending it to the workbook is Phase 4."}
+            : d.summary.status === "resolved"
+              ? "This round is resolved. Appending it to the workbook is Phase 4."
+              : "This round was put aside. Its documents count for nothing and can be uploaded again."}
         </p>
-      </div>`;
+      </div>
+
+      ${!editable ? `
+      <div class="panel">
+        <p class="muted" style="margin:0 0 .5rem">A wrong document is usually only noticed after the
+          round is closed. Reopening puts it back to staged so it can be taken out. While the round
+          is open, later rounds are derived without it.</p>
+        <label for="reopen-why">Why is this round being reopened? (required)</label>
+        <input id="reopen-why" type="text" placeholder="e.g. the payment file turned out to be another producer's">
+        <button data-reopen data-why="reopen-why">Reopen the round</button>
+      </div>` : ""}
+
+      ${editable ? `
+      <div class="panel">
+        <p class="muted" style="margin:0 0 .5rem">If every file in this round was the wrong one, put
+          the whole round aside. It is kept, and its documents stop blocking a fresh upload of the
+          same files.</p>
+        <label for="abandon-why">Why is the whole round being put aside? (required)</label>
+        <input id="abandon-why" type="text" placeholder="e.g. uploaded against the wrong producer">
+        <button data-abandon data-why="abandon-why">Put the round aside</button>
+      </div>` : ""}`;
 
     target.hidden = false;
     wire();

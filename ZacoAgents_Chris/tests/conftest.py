@@ -92,8 +92,9 @@ def clean_db(migrated: str) -> Iterator[None]:
     with engine.begin() as connection:
         connection.execute(
             text(
-                "TRUNCATE suspensions, round_documents, rounds, product_codes, product_names, "
-                "product_decisions, delivery_notes, invitations, users RESTART IDENTITY CASCADE"
+                "TRUNCATE suspensions, round_events, round_documents, rounds, product_codes, "
+                "product_names, product_decisions, delivery_notes, invitations, users "
+                "RESTART IDENTITY CASCADE"
             )
         )
     yield

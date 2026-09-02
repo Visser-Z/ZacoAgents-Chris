@@ -28,10 +28,13 @@ from zaco.db.models import (
     ProductDecision,
     ProductName,
     Round,
+    RoundAction,
     RoundDocument,
+    RoundEvent,
     RoundStatus,
     Suspension,
     User,
+    utcnow,
 )
 from zaco.domain.build import build_round, load_short_codes
 from zaco.domain.model import ZERO, AccountSale, StagedRound
@@ -99,6 +102,11 @@ def save_round(
             .where(
                 RoundDocument.content_sha256 == sha,
                 RoundDocument.duplicate_of_round_id.is_(None),
+                # A document taken back out counts for nothing, so the same bytes must be able to
+                # come back and count. Without this, withdrawing a file poisons it: re-uploading
+                # the very copy that was meant to be there would be called a duplicate of the one
+                # that was removed, and would contribute nothing either.
+                RoundDocument.withdrawn_at.is_(None),
                 Round.status != RoundStatus.ABANDONED.value,
                 Round.id != round_.id,
             )
@@ -155,6 +163,8 @@ class ResolvedRound:
     duplicates: list[DuplicateAlert] = field(default_factory=list)
     suspensions: list[Suspension] = field(default_factory=list)
     grouping_dates: dict[str, date] = field(default_factory=dict)
+    orphaned_notes: list[DeliveryNote] = field(default_factory=list)
+    """Delivery notes approved for a delivery this round no longer contains (see `_orphaned`)."""
 
     @property
     def open_items(self) -> list[queue_builder.Item]:
@@ -271,7 +281,12 @@ def remember_proven_links(db: Session, staged: StagedRound) -> None:
 
 
 def _documents(round_: Round) -> list[tuple[str, bytes]]:
-    return [(d.filename, d.content) for d in round_.documents if d.duplicate_of_round_id is None]
+    """The documents this round's figures are derived from.
+
+    Nothing else has to know about withdrawal or duplication: every row, balance and question in
+    the system comes from this list, because none of it is stored derived.
+    """
+    return [(d.filename, d.content) for d in round_.documents if d.counts]
 
 
 @dataclass
@@ -352,7 +367,9 @@ def load(db: Session, round_: Round) -> ResolvedRound:
             ),
         )
         for d in round_.documents
-        if d.duplicate_of_round_id is not None
+        # A withdrawn document is already reported as withdrawn. Calling it a skipped duplicate
+        # as well would say it twice and name the wrong reason.
+        if d.duplicate_of_round_id is not None and not d.is_withdrawn
     ]
 
     book = book_reader.read(workbook_path())
@@ -397,6 +414,41 @@ def load(db: Session, round_: Round) -> ResolvedRound:
         duplicates=duplicates,
         suspensions=suspensions,
         grouping_dates=grouping_dates(staged, approved),
+        orphaned_notes=_orphaned(db, round_, staged, past),
+    )
+
+
+def _orphaned(db: Session, round_: Round, staged: StagedRound, past: History) -> list[DeliveryNote]:
+    """Delivery notes approved for a delivery that withdrawing a document took away.
+
+    An approved note is keyed on the delivery, not on the round, and every number ever approved
+    is `spoken_for` when a fresh one is minted. So a note left behind by a withdrawal quietly
+    holds a number out of the `14xxx` series for a delivery that no longer exists anywhere --
+    and that series is the only thing the operator's book contributes today.
+
+    Reported rather than cleaned up: releasing a number somebody approved is a judgement, and the
+    system does not make those on its own.
+    """
+    restored = [
+        d
+        for d in round_.documents
+        if d.counts or (d.is_withdrawn and d.duplicate_of_round_id is None)
+    ]
+    if len(restored) == len([d for d in round_.documents if d.counts]):
+        return []
+
+    with_them, _ = build_round(
+        [(d.filename, read_document(d.content)) for d in restored],
+        build_registry(db),
+        past.counted,
+        dict(past.settled),
+    )
+    lost = {d for d in with_them.deliveries if d} - {d for d in staged.deliveries if d}
+    if not lost:
+        return []
+    return sorted(
+        db.execute(select(DeliveryNote).where(DeliveryNote.delivery_id.in_(lost))).scalars(),
+        key=lambda n: n.delivery_id,
     )
 
 
@@ -558,6 +610,101 @@ def approve_dn(
     note.approved_by = user
     db.flush()
     return note
+
+
+# --- taking a document back out ------------------------------------------------------------------
+
+
+def record(
+    db: Session, round_: Round, user: User, action: RoundAction, subject: str, reason: str
+) -> RoundEvent:
+    event = RoundEvent(
+        round_id=round_.id, action=action.value, subject=subject, reason=reason, by=user
+    )
+    db.add(event)
+    db.flush()
+    return event
+
+
+def withdraw_document(
+    db: Session, round_: Round, user: User, document: RoundDocument, reason: str
+) -> RoundDocument:
+    """Take one document out of a round's figures, keeping the file.
+
+    The classifier refuses what it cannot read, which is a narrower guard than it looks: another
+    business's payment export, or last quarter's run, is a perfectly good Payment Details report
+    and is read without complaint. This is the way back out.
+    """
+    document.withdrawn_at = utcnow()
+    document.withdrawn_reason = reason
+    document.withdrawn_by = user
+    record(db, round_, user, RoundAction.WITHDRAWN, document.filename, reason)
+    db.flush()
+    return document
+
+
+def restore_document(
+    db: Session, round_: Round, user: User, document: RoundDocument, reason: str = ""
+) -> RoundDocument:
+    document.withdrawn_at = None
+    document.withdrawn_reason = ""
+    document.withdrawn_by = None
+    record(db, round_, user, RoundAction.RESTORED, document.filename, reason)
+    db.flush()
+    return document
+
+
+def rounds_after(db: Session, round_: Round) -> list[Round]:
+    """The resolved rounds derived on top of this one.
+
+    `history()` walks resolved rounds only, so reopening one drops it out of the history these
+    are built from: their opening stock and their duplicate checks change while it is open, and
+    come back when it is closed again. Correct, and surprising, so it is said out loud.
+    """
+    return list(
+        db.execute(
+            select(Round)
+            .where(Round.status == RoundStatus.RESOLVED.value, Round.id > round_.id)
+            .order_by(Round.id)
+        )
+        .scalars()
+        .all()
+    )
+
+
+def reopen_round(db: Session, round_: Round, user: User, reason: str) -> Round:
+    round_.status = RoundStatus.STAGED.value
+    round_.resolved_at = None
+    round_.resolved_by = None
+    record(db, round_, user, RoundAction.REOPENED, f"round {round_.id}", reason)
+    db.flush()
+    return round_
+
+
+def abandon_round(db: Session, round_: Round, user: User, reason: str) -> Round:
+    """Put a whole round aside -- the five-wrong-files case.
+
+    Kept rather than deleted, and `save_round` already ignores an abandoned round when looking
+    for earlier copies of a file, so the same documents can be uploaded again properly.
+    """
+    round_.status = RoundStatus.ABANDONED.value
+    record(db, round_, user, RoundAction.ABANDONED, f"round {round_.id}", reason)
+    db.flush()
+    return round_
+
+
+def release_delivery_note(
+    db: Session, round_: Round, user: User, note: DeliveryNote, reason: str
+) -> None:
+    """Give an approved number back to the series, keeping the fact that it was approved.
+
+    The row goes, because leaving it is what holds the number out of the `14xxx` series; the
+    event keeps the number, the delivery, the person and the reason.
+    """
+    subject = f"{note.delivery_id} / DN {note.dn or '(none recorded)'}"
+    db.delete(note)
+    record(db, round_, user, RoundAction.DN_RELEASED, subject, reason)
+    db.flush()
 
 
 def totals(resolved: ResolvedRound) -> dict[str, str]:

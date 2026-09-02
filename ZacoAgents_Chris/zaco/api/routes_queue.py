@@ -22,11 +22,14 @@ from zaco.api.schemas import (
     DecideSuspensionIn,
     DeliveryNoteOut,
     DeliveryOut,
+    DocumentOut,
+    EventOut,
     LinkDecisionIn,
     Message,
     ProblemOut,
     ProductOut,
     QueueItemOut,
+    ReasonIn,
     ResolvedRowOut,
     RoundOut,
     RoundSummaryOut,
@@ -125,6 +128,162 @@ def index(db: Session = Depends(get_db), _: User = Depends(may_ingest)) -> list[
 @router.get("/{round_id}", response_model=RoundOut)
 def show(round_id: int, db: Session = Depends(get_db), _: User = Depends(may_ingest)) -> RoundOut:
     return _render(db, service.load(db, _round_or_404(db, round_id)))
+
+
+# --- taking a document back out ------------------------------------------------------------------
+
+
+def _document_or_404(db: Session, round_: Round, document_id: int) -> RoundDocument:
+    found = db.get(RoundDocument, document_id)
+    if found is None or found.round_id != round_.id:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND, f"Round {round_.id} has no document {document_id}."
+        )
+    return found
+
+
+def _reason(body: ReasonIn, message: str) -> str:
+    text = body.reason.strip()
+    if not text:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, message)
+    return text
+
+
+@router.post("/{round_id}/documents/{document_id}/withdraw", response_model=RoundOut)
+def withdraw_document(
+    round_id: int,
+    document_id: int,
+    body: ReasonIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(may_resolve),
+) -> RoundOut:
+    """Take a wrongly uploaded document out of the round's figures, keeping the file.
+
+    Needed because being readable is not the same as belonging here: another business's payment
+    export, or last quarter's run, is a perfectly good Payment Details report and the classifier
+    has no reason to refuse it.
+    """
+    round_ = _editable(_round_or_404(db, round_id))
+    document = _document_or_404(db, round_, document_id)
+    if document.is_withdrawn:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, f"{document.filename} is already out of this round."
+        )
+    reason = _reason(
+        body,
+        "Say why this document is being taken out. Its rows are about to leave the round, and "
+        "whoever compares the figures next month needs to know they were removed on purpose.",
+    )
+    service.withdraw_document(db, round_, user, document, reason)
+    return _render(db, service.load(db, round_))
+
+
+@router.post("/{round_id}/documents/{document_id}/restore", response_model=RoundOut)
+def restore_document(
+    round_id: int,
+    document_id: int,
+    body: ReasonIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(may_resolve),
+) -> RoundOut:
+    """Put a withdrawn document back. Its figures return exactly as they were."""
+    round_ = _editable(_round_or_404(db, round_id))
+    document = _document_or_404(db, round_, document_id)
+    if not document.is_withdrawn:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT, f"{document.filename} is already part of this round."
+        )
+    service.restore_document(db, round_, user, document, body.reason.strip())
+    return _render(db, service.load(db, round_))
+
+
+@router.post("/{round_id}/reopen", response_model=RoundOut)
+def reopen(
+    round_id: int,
+    body: ReasonIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(may_resolve),
+) -> RoundOut:
+    """Put a closed or set-aside round back to staged, so a document can be taken out of it.
+
+    The mistake is usually only noticed later, so refusing to reopen would leave a wrong document
+    in the figures permanently. Phase 4 adds the second guard: a round already appended to the
+    workbook cannot be reopened, because an append cannot be unwritten.
+    """
+    round_ = _round_or_404(db, round_id)
+    if round_.status == RoundStatus.STAGED.value:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Round {round_.id} is already open, so there is nothing to reopen.",
+        )
+    reason = _reason(body, "Say why this round is being reopened.")
+    later = service.rounds_after(db, round_)
+    service.reopen_round(db, round_, user, reason)
+    rendered = _render(db, service.load(db, round_))
+    if later:
+        names = ", ".join(f"#{r.id}" for r in later)
+        rendered.alerts.append(
+            AlertOut(
+                subject=f"round {round_.id}",
+                message=(
+                    f"While this round is open, round(s) {names} are derived without it: their "
+                    "opening stock starts earlier and sales this round already counted are no "
+                    "longer skipped as duplicates. Closing it again puts that back."
+                ),
+            )
+        )
+    return rendered
+
+
+@router.post("/{round_id}/abandon", response_model=RoundOut)
+def abandon(
+    round_id: int,
+    body: ReasonIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(may_resolve),
+) -> RoundOut:
+    """Put a whole round aside -- the case where every file in it was the wrong one.
+
+    Kept rather than deleted, and its documents stop blocking a re-upload, so the same files can
+    be loaded again properly once the right ones are to hand.
+    """
+    round_ = _editable(_round_or_404(db, round_id))
+    reason = _reason(body, "Say why this round is being put aside.")
+    service.abandon_round(db, round_, user, reason)
+    return _render(db, service.load(db, round_))
+
+
+@router.post("/{round_id}/delivery-notes/{delivery_id}/release", response_model=RoundOut)
+def release_delivery_note(
+    round_id: int,
+    delivery_id: str,
+    body: ReasonIn,
+    db: Session = Depends(get_db),
+    user: User = Depends(may_resolve),
+) -> RoundOut:
+    """Give an approved delivery note number back to the series.
+
+    Only reachable for a delivery no round contains any more. Approved numbers are keyed on the
+    delivery rather than the round and every one of them is avoided when a fresh number is
+    minted, so a note left behind by a withdrawal quietly holds a number out of the `14xxx`
+    series for a delivery that no longer exists.
+    """
+    round_ = _editable(_round_or_404(db, round_id))
+    resolved = service.load(db, round_)
+    note = next((n for n in resolved.orphaned_notes if n.delivery_id == delivery_id), None)
+    if note is None:
+        raise HTTPException(
+            status.HTTP_404_NOT_FOUND,
+            f"No delivery note is stranded on {delivery_id}. A note is only released once the "
+            "delivery it was approved for has left the round.",
+        )
+    reason = _reason(
+        body,
+        "Say why this approved number is being given back. It was approved by a person, and the "
+        "record has to show why it stopped applying.",
+    )
+    service.release_delivery_note(db, round_, user, note, reason)
+    return _render(db, service.load(db, round_))
 
 
 # --- answering ---------------------------------------------------------------------------------
@@ -310,7 +469,30 @@ def _summary(db: Session, round_: Round) -> RoundSummaryOut:
         created_at=round_.created_at,
         created_by=round_.created_by.email if round_.created_by else None,
         document_count=len(documents),
-        duplicate_count=len([d for d in documents if d.duplicate_of_round_id is not None]),
+        duplicate_count=len(
+            [d for d in documents if d.duplicate_of_round_id is not None and not d.is_withdrawn]
+        ),
+        withdrawn_count=len([d for d in documents if d.is_withdrawn]),
+    )
+
+
+def _document(document: RoundDocument) -> DocumentOut:
+    if document.is_withdrawn:
+        state = "withdrawn"
+    elif document.duplicate_of_round_id is not None:
+        state = "duplicate"
+    else:
+        state = "counted"
+    return DocumentOut(
+        id=document.id,
+        filename=document.filename,
+        kind=document.kind,
+        byte_count=document.byte_count,
+        state=state,
+        duplicate_of_round_id=document.duplicate_of_round_id,
+        withdrawn_reason=document.withdrawn_reason,
+        withdrawn_by=document.withdrawn_by.email if document.withdrawn_by else None,
+        withdrawn_at=document.withdrawn_at,
     )
 
 
@@ -375,9 +557,36 @@ def _render(db: Session, resolved: ResolvedRound) -> RoundOut:
     for row in staged.rows:
         rows_by_sale[row.account_sale] = rows_by_sale.get(row.account_sale, 0) + 1
 
-    alerts = [AlertOut(subject=d.filename, message=d.message) for d in resolved.duplicates] + [
-        AlertOut(subject=s.subject_key, message=s.description) for s in staged.skipped
-    ]
+    documents = sorted(resolved.round.documents, key=lambda d: d.id)
+    alerts = (
+        [AlertOut(subject=d.filename, message=d.message) for d in resolved.duplicates]
+        + [AlertOut(subject=s.subject_key, message=s.description) for s in staged.skipped]
+        + [
+            AlertOut(
+                subject=d.filename,
+                message=(
+                    f"Taken out of this round by "
+                    f"{d.withdrawn_by.email if d.withdrawn_by else 'somebody since removed'}: "
+                    f"“{d.withdrawn_reason}”. The file is kept; nothing in these figures "
+                    "comes from it."
+                ),
+            )
+            for d in documents
+            if d.is_withdrawn
+        ]
+        + [
+            AlertOut(
+                subject=n.delivery_id,
+                message=(
+                    f"Delivery note {n.dn or '(none recorded)'} is still approved for delivery "
+                    f"{n.delivery_id}, which no longer appears in this round. Until it is "
+                    "released, that number stays out of the series and cannot be proposed for "
+                    "anything else."
+                ),
+            )
+            for n in resolved.orphaned_notes
+        ]
+    )
 
     book = {
         "state": "read" if resolved.book.is_readable else "not read",
@@ -476,6 +685,29 @@ def _render(db: Session, resolved: ResolvedRound) -> RoundOut:
             for p in staged.problems
         ],
         stock_notes=resolved.ledger.notes,
+        documents=[_document(d) for d in documents],
+        events=[
+            EventOut(
+                action=e.action,
+                subject=e.subject,
+                reason=e.reason,
+                at=e.at,
+                by=e.by.email if e.by else None,
+            )
+            for e in sorted(resolved.round.events, key=lambda e: e.id)
+        ],
+        orphaned_delivery_notes=[
+            DeliveryNoteOut(
+                delivery_id=n.delivery_id,
+                dn=n.dn,
+                provenance=n.provenance,
+                reasoning=n.reasoning,
+                operator_reason=n.operator_reason,
+                approved_by=n.approved_by.email if n.approved_by else None,
+                approved_at=n.approved_at,
+            )
+            for n in resolved.orphaned_notes
+        ],
     )
 
 

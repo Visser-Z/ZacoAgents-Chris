@@ -312,7 +312,34 @@ class RoundSummaryOut(BaseModel):
     created_by: str | None = None
     document_count: int
     duplicate_count: int = 0
+    withdrawn_count: int = 0
     open_questions: int = 0
+
+
+class DocumentOut(BaseModel):
+    """One uploaded file and whether it is currently contributing anything."""
+
+    id: int
+    filename: str
+    kind: str
+    byte_count: int
+    state: str
+    """`counted`, `duplicate` or `withdrawn`."""
+
+    duplicate_of_round_id: int | None = None
+    withdrawn_reason: str = ""
+    withdrawn_by: str | None = None
+    withdrawn_at: datetime | None = None
+
+
+class EventOut(BaseModel):
+    """Something a person did to this round after it was uploaded."""
+
+    action: str
+    subject: str
+    reason: str
+    at: datetime
+    by: str | None = None
 
 
 class RoundOut(BaseModel):
@@ -334,6 +361,10 @@ class RoundOut(BaseModel):
     products: list[ProductOut] = Field(default_factory=list)
     problems: list[ProblemOut] = Field(default_factory=list)
     stock_notes: list[str] = Field(default_factory=list)
+    documents: list[DocumentOut] = Field(default_factory=list)
+    events: list[EventOut] = Field(default_factory=list)
+    orphaned_delivery_notes: list[DeliveryNoteOut] = Field(default_factory=list)
+    """Approved notes whose delivery a withdrawal took away -- their numbers are still held."""
 
 
 class ApproveDnIn(BaseModel):
@@ -362,6 +393,16 @@ class LinkDecisionIn(BaseModel):
     left: str
     right: str
     accepted: bool
+    reason: str = ""
+
+
+class ReasonIn(BaseModel):
+    """A typed reason, for the actions that undo something somebody already did.
+
+    Not `min_length=1` here: the endpoints check it themselves so the refusal can say what the
+    reason is for, which is the difference between a message that teaches and one that nags.
+    """
+
     reason: str = ""
 
 
