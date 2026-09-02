@@ -15,7 +15,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from zaco.api import routes_admin, routes_auth, routes_health
+from zaco.api import routes_admin, routes_auth, routes_health, routes_ingest
 from zaco.auth.service import seed_admin
 from zaco.config import get_settings
 from zaco.db.base import get_session_factory
@@ -79,6 +79,7 @@ def create_app() -> FastAPI:
     app.include_router(routes_health.router)
     app.include_router(routes_auth.router)
     app.include_router(routes_admin.router)
+    app.include_router(routes_ingest.router)
     app.include_router(web_routes.router)
 
     static_dir = Path(__file__).parent / "web" / "static"

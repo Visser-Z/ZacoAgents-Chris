@@ -19,6 +19,7 @@ from zaco.auth.deps import current_user_optional
 from zaco.auth.permissions import ALL_PERMISSIONS, DESCRIPTIONS, Permission
 from zaco.db.base import get_db
 from zaco.db.models import Invitation, User
+from zaco.ingest.records import TITLES
 
 TEMPLATES_DIR = Path(__file__).parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
@@ -31,7 +32,7 @@ router = APIRouter(include_in_schema=False)
 # The nav for the whole system. Phases beyond 0 fill these in; until then each is shown
 # disabled with the phase that will build it, so the shell is honest about what exists.
 NAV = [
-    ("/rounds", "Rounds", Permission.INGEST, "Phase 1"),
+    ("/rounds", "Read a document", Permission.INGEST, None),
     ("/queue", "Resolution queue", Permission.RESOLVE, "Phase 3"),
     ("/workbook", "Workbook", Permission.APPEND, "Phase 4"),
     ("/reconciliation", "Reconciliation", Permission.VIEW_REPORTS, "Phase 5"),
@@ -86,3 +87,14 @@ def admin_page(
     )
     base = str(request.base_url).rstrip("/")
     return _page(request, "admin.html", user, users=users, invitations=invitations, base_url=base)
+
+
+@router.get("/rounds", response_model=None)
+def rounds_page(
+    request: Request, user: User | None = Depends(current_user_optional)
+) -> HTMLResponse | RedirectResponse:
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    if not user.can(Permission.INGEST):
+        return _page(request, "forbidden.html", user, needed=Permission.INGEST)
+    return _page(request, "upload.html", user, kinds={k.value: v for k, v in TITLES.items()})

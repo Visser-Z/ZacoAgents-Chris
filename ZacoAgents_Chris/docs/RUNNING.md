@@ -56,7 +56,9 @@ ruff check . && mypy zaco
 ```
 
 Tests that need Postgres are marked `db` and **skip with a reason** when it is unreachable, so
-the suite still runs on a machine that has not started the stack. The schema under test is built
+the suite still runs on a machine that has not started the stack. They use a separate
+`zaco_test` database, created by `docker/initdb/`, because they truncate tables between cases --
+running the suite must never destroy a staged round. The schema under test is built
 by running the real migrations, not `create_all`, so a migration that has drifted from the
 models fails here rather than on a deploy.
 

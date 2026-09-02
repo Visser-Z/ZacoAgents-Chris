@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block title %}Read a document — Zaco{% endblock %}
+
+{% block content %}
+<h1>Read a document</h1>
+<p class="lede">
+  Drop in one agent report. The system works out what it is by reading it, never by its
+  filename, and shows you everything it could and could not make sense of.
+</p>
+
+<div class="panel">
+  <form id="upload-form">
+    <div class="error" data-error hidden></div>
+    <label for="file">The file</label>
+    <input id="file" name="file" type="file" required>
+
+    <label for="expected">What you believe it is (optional)</label>
+    <select id="expected" name="expected">
+      <option value="">Let the system work it out</option>
+      {% for value, title in kinds.items() %}
+      <option value="{{ value }}">{{ title }}</option>
+      {% endfor %}
+    </select>
+    <p class="muted" style="font-size:0.88em;margin:0.4rem 0 0">
+      If you name a kind and the file turns out to be something else, it is refused rather than
+      read either way. The file is not what you think it is, and that is worth stopping for.
+    </p>
+
+    <button type="submit">Read it</button>
+  </form>
+</div>
+
+<div id="result" hidden></div>
+
+<template id="tpl-refusal">
+  <h2>Refused</h2>
+  <div class="error" data-detail></div>
+  <p class="muted">Nothing was taken from it. What each reader made of the file:</p>
+  <div class="panel"><table><tbody data-scores></tbody></table></div>
+</template>
+
+<script>
+(function () {
+  const form = document.getElementById("upload-form");
+  const errorBox = form.querySelector("[data-error]");
+  const target = document.getElementById("result");
+
+  const escape = (s) => String(s ?? "").replace(/[&<>"]/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    errorBox.hidden = true;
+    target.hidden = true;
+    const button = form.querySelector("button[type=submit]");
+    button.disabled = true;
+
+    try {
+      const body = new FormData();
+      body.append("file", document.getElementById("file").files[0]);
+      const expected = document.getElementById("expected").value;
+      if (expected) body.append("expected", expected);
+
+      const response = await fetch("/api/ingest/inspect", {
+        method: "POST", body, credentials: "same-origin",
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        renderRefusal(payload.detail);
+      } else {
+        renderInspection(payload);
+      }
+      target.hidden = false;
+    } catch (error) {
+      errorBox.textContent = error.message;
+      errorBox.hidden = false;
+    } finally {
+      button.disabled = false;
+    }
+  });
+
+  function renderRefusal(detail) {
+    if (typeof detail === "string") {
+      target.innerHTML = `<h2>Refused</h2><div class="error">${escape(detail)}</div>`;
+      return;
+    }
+    const scores = Object.entries(detail.scores || {})
+      .sort((a, b) => b[1] - a[1])
+      .map(([kind, value]) =>
+        `<tr><td class="mono">${escape(kind)}</td><td class="num">${(value * 100).toFixed(0)}%</td></tr>`)
+      .join("");
+    target.innerHTML =
+      `<h2>Refused</h2>
+       <div class="error">${escape(detail.detail)}</div>
+       <p class="muted">What each reader made of <span class="mono">${escape(detail.filename)}</span>:</p>
+       <div class="panel"><table><thead><tr><th>Reader</th><th>Confidence</th></tr></thead>
+       <tbody>${scores || '<tr><td colspan="2">Nothing recognised it.</td></tr>'}</tbody></table></div>`;
+  }
+
+  function renderInspection(data) {
+    const counts = Object.entries(data.counts)
+      .filter(([, n]) => n > 0)
+      .map(([name, n]) => `${n} ${name}`)
+      .join(", ") || "nothing";
+
+    const scopeClass = data.scope.is_narrowed ? "warning"
+                     : data.scope.is_unstated ? "warning" : "notice";
+    const scopeExtra = data.scope.is_narrowed
+      ? " Anything outside that is absent from this file, not absent from the business."
+      : data.scope.is_unstated
+      ? " It cannot be assumed complete."
+      : "";
+
+    const bySeverity = { error: [], warning: [], note: [] };
+    data.problems.forEach((p) => (bySeverity[p.severity] || bySeverity.note).push(p));
+
+    const problemBlock = (severity, title, cls) => {
+      const items = bySeverity[severity];
+      if (!items.length) return "";
+      return `<h2>${title} <span class="muted">(${items.length})</span></h2>` +
+        items.map((p) =>
+          `<div class="${cls}">${escape(p.message)}
+            ${p.line_number ? `<div class="muted" style="margin-top:.3rem">line ${p.line_number}${p.line ? `: <span class="mono">${escape(p.line)}</span>` : ""}</div>` : ""}
+          </div>`).join("");
+    };
+
+    const rows = data.preview.map((r) => {
+      const figures = Object.entries(r.figures)
+        .map(([k, v]) => `<div><span class="muted">${escape(k)}:</span> ${escape(v)}</div>`)
+        .join("");
+      const flags = r.flags.map((f) => `<span class="tag">${escape(f)}</span>`).join("");
+      return `<tr>
+        <td class="mono">${escape(r.label)}</td>
+        <td>${escape(r.detail)}<div style="margin-top:.35rem">${flags}</div></td>
+        <td style="font-size:.9em">${figures}</td>
+      </tr>`;
+    }).join("");
+
+    target.innerHTML = `
+      <h2>Read as ${escape(data.kind_title)}</h2>
+      <div class="notice">
+        <strong>${escape(data.filename)}</strong> was identified by its content as a
+        ${escape(data.kind_title)} (confidence ${(data.confidence * 100).toFixed(0)}%),
+        and yielded ${escape(counts)}.
+      </div>
+      <div class="${scopeClass}"><strong>Scope:</strong> ${escape(data.scope.description)}.${scopeExtra}</div>
+      ${problemBlock("error", "Errors", "error")}
+      ${problemBlock("warning", "Warnings", "warning")}
+      ${problemBlock("note", "Notes", "notice")}
+      <h2>What was read</h2>
+      <div class="panel"><table>
+        <thead><tr><th>Record</th><th>Detail</th><th>Figures</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+      <p class="muted" style="font-size:.9em">
+        Nothing has been stored. This phase reads and reports; staging a round into the durable
+        record comes next.
+      </p>`;
+  }
+})();
+</script>
+{% endblock %}

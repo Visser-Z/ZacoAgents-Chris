@@ -11,6 +11,9 @@ services:
       POSTGRES_DB: zaco
     volumes:
       - zaco_pgdata:/var/lib/postgresql/data
+      # Creates the separate `zaco_test` database the suite uses, so `pytest` can never
+      # truncate the development data.
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U zaco -d zaco"]
       interval: 3s

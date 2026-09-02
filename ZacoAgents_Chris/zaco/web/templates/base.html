@@ -19,7 +19,11 @@
 <nav class="main">
   {% for path, label, permission, phase in nav %}
     {% if user.can(permission) %}
-      <span class="pending" title="Not built yet">{{ label }}<span class="phase">{{ phase }}</span></span>
+      {% if phase %}
+        <span class="pending" title="Not built yet">{{ label }}<span class="phase">{{ phase }}</span></span>
+      {% else %}
+        <a href="{{ path }}">{{ label }}</a>
+      {% endif %}
     {% endif %}
   {% endfor %}
 </nav>
