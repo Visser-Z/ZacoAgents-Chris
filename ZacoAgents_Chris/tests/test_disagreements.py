@@ -116,3 +116,81 @@ def test_a_decision_is_not_asked_for_twice(operator: TestClient, conflicted: Any
     again = operator.get(f"/api/rounds/{round_id}").json()
     assert len(again["suspensions"]) == 1
     assert again["suspensions"][0]["is_decided"] is True
+
+
+# --- across a round boundary ---------------------------------------------------------------------
+
+
+def _settle_the_full_export(client: TestClient) -> int:
+    """Upload the full export and answer its queue, so a later round has something to compare to."""
+    response = client.post(
+        "/api/rounds", files=[("files", (FULL, (DATA / FULL).read_bytes(), "text/plain"))]
+    )
+    assert response.status_code == 201, response.text
+    body = response.json()
+    round_id = body["summary"]["id"]
+    for item in body["queue"]:
+        assert item["kind"] == "product_code", f"unexpected question: {item['kind']}"
+        assert (
+            client.post(
+                "/api/products/code",
+                json={"product_key": item["key"], "short_code": "Code " + item["title"][:12]},
+            ).status_code
+            == 200
+        )
+    assert client.post(f"/api/rounds/{round_id}/resolve").status_code == 200
+    return round_id
+
+
+def test_an_account_sale_restated_in_a_later_round_is_compared_not_duplicated(
+    operator: TestClient,
+) -> None:
+    """Each round is derived on its own, so without this the later figure is simply a second
+    record of one payment and only the one uploaded first survives into the settlement."""
+    _settle_the_full_export(operator)
+
+    second = operator.post(
+        "/api/rounds",
+        files=[("files", ("PaymentDetails_corrected.csv", _conflicting(), "text/csv"))],
+    )
+    assert second.status_code == 201, second.text
+    body = second.json()
+
+    suspended = [s for s in body["suspensions"] if s["subject_key"] == "PRE*BT*382880"]
+    assert suspended, "the restated account sale was not held back"
+    assert "250.00" in suspended[0]["differences"]
+    assert "260.00" in suspended[0]["differences"]
+    assert body["is_clear"] is False
+
+
+def test_an_account_sale_repeated_unchanged_in_a_later_round_is_only_noted(
+    operator: TestClient,
+) -> None:
+    _settle_the_full_export(operator)
+
+    second = operator.post(
+        "/api/rounds",
+        files=[("files", (NARROWED, (DATA / NARROWED).read_bytes(), "text/csv"))],
+    )
+    body = second.json()
+    assert body["suspensions"] == []
+    assert {a["subject"] for a in body["alerts"]} >= {"PRE*BT*382860", "PRE*BT*382885"}
+
+
+def test_an_account_sale_settled_last_round_is_not_reported_as_a_loose_end(
+    operator: TestClient,
+) -> None:
+    """ "Paid, and nothing accounts for it" is a real state. Something accounted for last month
+    is not, and saying so every round afterwards is noise."""
+    _settle_the_full_export(operator)
+
+    second = operator.post(
+        "/api/rounds",
+        files=[("files", (NARROWED, (DATA / NARROWED).read_bytes(), "text/csv"))],
+    )
+    complaints = [
+        p["message"]
+        for p in second.json()["problems"]
+        if "no sales document accounts for it" in p["message"]
+    ]
+    assert not [c for c in complaints if "382885" in c]

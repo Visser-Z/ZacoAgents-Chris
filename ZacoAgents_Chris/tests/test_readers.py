@@ -9,6 +9,7 @@ Two things are asserted throughout, because they are what section 13 assesses:
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
@@ -355,6 +356,28 @@ def test_the_two_april_payment_runs_stay_separate() -> None:
     by_number = {a.account_sale_number: a for a in result.adjustments}
     assert by_number["JOH*SUB*5640001/1"].nett_payment == Decimal("5100.00")
     assert by_number["JOH*SUB*5640001/2"].nett_payment == Decimal("3230.00")
+
+
+def test_the_spaced_out_account_sale_is_read_too() -> None:
+    """The same file uses two shapes: `JOH*SUB*5640001/12026-04-13` with the date jammed on,
+    and `PRE*BT*380101 2026-04-01` with a space between them.
+
+    Handling only the jammed one reads the Tshwane account sales as a second supplier reference
+    and leaves the record with no number at all -- a real payment in the system with nothing to
+    join it on.
+    """
+    result = read(ADJUSTMENTS)
+    by_number = {a.account_sale_number: a for a in result.adjustments}
+    assert "PRE*BT*380101" in by_number
+    assert by_number["PRE*BT*380101"].date_paid == date(2026, 4, 1)
+    assert by_number["PRE*BT*380101"].gross_payment == Decimal("2700.00")
+    assert by_number["PRE*BT*380101"].supplier_refs == ["20026*14700"]
+    assert by_number["PRE*BT*380102"].supplier_refs == ["14013*14703"]
+
+
+def test_every_adjustment_carries_the_account_sale_it_paid() -> None:
+    result = read(ADJUSTMENTS)
+    assert all(a.account_sale_number for a in result.adjustments)
 
 
 def test_a_total_row_in_the_middle_of_a_section_does_not_end_it() -> None:

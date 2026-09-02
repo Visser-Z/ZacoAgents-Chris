@@ -236,6 +236,16 @@
 
   // --- the whole round ------------------------------------------------------------------------------
 
+  // A recorded "no delivery note" is an answer (D11). Showing it as "waiting" would put it back
+  // in the state the recording exists to get it out of.
+  const dnCell = (r) => {
+    if (r.dn) return esc(r.dn);
+    if (r.dn_provenance === "none_foreign_producer") {
+      return '<span class="tag" title="Recorded, with a reason">no DN &mdash; recorded</span>';
+    }
+    return '<span class="tag">waiting</span>';
+  };
+
   function draw() {
     const d = current;
     const t = d.totals;
@@ -289,7 +299,7 @@
         <tbody>${d.rows.map((r) => {
           const s = r.stock || {};
           return `<tr>
-            <td class="mono">${r.dn ? esc(r.dn) : '<span class="tag">waiting</span>'}</td>
+            <td class="mono">${dnCell(r)}</td>
             <td>${esc(r.grouping_date || r.earliest_date || "-")}</td>
             <td class="mono">${esc(r.account_sale_display)}</td>
             <td>${r.short_code ? esc(r.short_code) : `<span class="tag">no code</span> <span class="muted">${esc(r.product)}</span>`}</td>

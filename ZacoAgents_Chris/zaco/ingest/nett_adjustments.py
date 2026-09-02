@@ -96,9 +96,16 @@ def _read_adjustment(
     account_sale, date_paid = split_trailing_date(tokens[-1])
     reference_tokens = tokens[:-1]
 
-    if date_paid is None and len(reference_tokens) >= 1:
-        # The two shapes: `... PRE*BT*380101 2026-04-01` with a space, and
-        # `... JOH*SUB*5640001/12026-04-13` without one.
+    # Two shapes, and the same file uses both. Subtropico's lines run the account sale and its
+    # date together -- `JOH*SUB*5640001/12026-04-13` -- so splitting the trailing date leaves the
+    # reference behind it. The Tshwane lines put a space between them, so the last token is
+    # *only* a date and the account sale is the token before it. Without this second case the
+    # account sale is read as another supplier reference and the record loses its number
+    # entirely, which is how a real payment ends up in the system with nothing to join it on.
+    if not account_sale and reference_tokens:
+        account_sale = reference_tokens[-1]
+        reference_tokens = reference_tokens[:-1]
+    elif date_paid is None and reference_tokens:
         maybe_date = parse_date(account_sale)
         if maybe_date is not None:
             date_paid = maybe_date

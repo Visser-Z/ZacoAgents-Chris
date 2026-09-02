@@ -14,5 +14,11 @@ render.yaml     text eol=lf
 # The exports in data/ are fixtures. Their exact bytes -- CRLF, a BOM, U+00A0 separators --
 # are the thing under test, so git must not touch them.
 data/**         -text
+
+# Same for the hand-made files in PersonalTest/: one carries a BOM and CRLF, another carries
+# U+00A0 thousands separators, and normalising either would quietly disarm the case it exists
+# to demonstrate. The README beside them is ordinary text.
+ZacoAgents_Chris/PersonalTest/**        -text
+ZacoAgents_Chris/PersonalTest/README.md text
 workbook/*.xlsx binary
 *.xlsx          binary

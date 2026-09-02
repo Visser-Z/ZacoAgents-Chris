@@ -34,9 +34,9 @@ from zaco.db.models import (
     User,
 )
 from zaco.domain.build import build_round, load_short_codes
-from zaco.domain.model import ZERO, StagedRound
+from zaco.domain.model import ZERO, AccountSale, StagedRound
 from zaco.domain.products import ProductRegistry, Vocabulary, normalise
-from zaco.ingest.classifier import read_document
+from zaco.ingest.classifier import UnrecognisedDocumentError, read_document
 from zaco.resolve import book as book_reader
 from zaco.resolve import queue as queue_builder
 from zaco.resolve.book import BookKnowledge
@@ -86,7 +86,12 @@ def save_round(
     saved: list[SavedDocument] = []
     for filename, content in uploads:
         sha = digest(content)
-        result = read_document(content)
+        try:
+            result = read_document(content)
+        except UnrecognisedDocumentError as refusal:
+            # Name the file. With five uploaded at once, "one of these is unreadable" leaves the
+            # operator opening each of them to find out which.
+            raise UnrecognisedDocumentError(f"{filename}: {refusal}", refusal.scores) from refusal
 
         earlier = db.execute(
             select(RoundDocument)
@@ -279,6 +284,9 @@ class History:
     counted: set[tuple[str, str, str, str]] = field(default_factory=set)
     """Every sale already counted, so an overlapping export cannot count one twice."""
 
+    settled: dict[str, AccountSale] = field(default_factory=dict)
+    """Every account sale already settled, so a restated one is compared rather than duplicated."""
+
 
 def history(db: Session, before: Round) -> History:
     """Re-derive every resolved round before this one, in order.
@@ -304,10 +312,14 @@ def history(db: Session, before: Round) -> History:
             [(name, read_document(content)) for name, content in _documents(previous)],
             registry,
             past.counted,
+            dict(past.settled),
         )
         ledger = build_ledger(staged.rows, staged.consignments, past.balances)
         past.balances.update(ledger.closing)
         past.counted |= staged.docket_identities
+        for number, record in staged.account_sales.items():
+            record.source_name = record.source_name or f"round {previous.id}"
+            past.settled.setdefault(number, record)
     return past
 
 
@@ -324,6 +336,7 @@ def load(db: Session, round_: Round) -> ResolvedRound:
         [(name, read_document(content)) for name, content in _documents(round_)],
         registry,
         past.counted,
+        past.settled,
     )
     remember_names(db, staged, registry)
     remember_proven_links(db, staged)
@@ -352,7 +365,9 @@ def load(db: Session, round_: Round) -> ResolvedRound:
         ).scalars()
     }
 
-    proposals = _propose_all(staged, book, approved)
+    # Every delivery note ever approved, so a mint cannot reissue one from an earlier round.
+    spoken_for = {dn for dn in db.execute(select(DeliveryNote.dn)).scalars() if dn}
+    proposals = _propose_all(staged, book, approved, spoken_for)
     suspensions = _sync_suspensions(db, round_, staged)
 
     ledger = build_ledger(staged.rows, staged.consignments, past.balances)
@@ -386,17 +401,25 @@ def load(db: Session, round_: Round) -> ResolvedRound:
 
 
 def _propose_all(
-    staged: StagedRound, book: BookKnowledge, approved: dict[str, DeliveryNote]
+    staged: StagedRound,
+    book: BookKnowledge,
+    approved: dict[str, DeliveryNote],
+    spoken_for: set[str],
 ) -> dict[str, Proposal]:
     """Propose a DN for every delivery, never reusing a number already spoken for.
 
-    `taken` grows as the loop runs, so two deliveries that both need minting get two different
-    numbers rather than the same one twice.
+    `spoken_for` is every delivery note ever approved, not just this round's. Scoping it to the
+    round in front of us would let a mint reissue a number an earlier round had already given to
+    a different delivery -- two loads under one delivery note, in the book the business settles
+    money against, with nothing looking wrong.
+
+    `taken` then grows as the loop runs, so two deliveries that both need minting in the same
+    round get two different numbers rather than the same one twice.
     """
     producer_codes = {d.producer_code for d in staged.deliveries.values() if d.producer_code} | {
         ZACO_PRODUCER_CODE
     }
-    taken = set(book.delivery_notes) | {n.dn for n in approved.values() if n.dn}
+    taken = set(book.delivery_notes) | spoken_for | {n.dn for n in approved.values() if n.dn}
 
     proposals: dict[str, Proposal] = {}
     for delivery in staged.deliveries.values():

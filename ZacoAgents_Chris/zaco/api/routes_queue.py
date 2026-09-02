@@ -107,7 +107,10 @@ async def create(
         # saved without it would look complete and would not be.
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_CONTENT,
-            {"detail": str(refusal), "scores": {k.value: v for k, v in refusal.scores.items()}},
+            {
+                "detail": str(refusal),
+                "scores": {k.value: v for k, v in refusal.scores.items()},
+            },
         ) from refusal
 
     return _render(db, service.load(db, round_))

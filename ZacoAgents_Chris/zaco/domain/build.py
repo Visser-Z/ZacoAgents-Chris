@@ -56,6 +56,7 @@ def build_round(
     documents: list[tuple[str, ParseResult]],
     registry: ProductRegistry | None = None,
     already_counted: set[tuple[str, str, str, str]] | None = None,
+    already_settled: dict[str, AccountSale] | None = None,
 ) -> tuple[StagedRound, ProductRegistry]:
     """Assemble one round. `documents` is (filename, parse result), in upload order.
 
@@ -72,6 +73,10 @@ def build_round(
     statements: list[AccountSalesStatement] = []
 
     counted = set(already_counted or ())
+    for number, record in (already_settled or {}).items():
+        staged.account_sales[number] = record
+        staged.carried_account_sales.add(number)
+
     for name, result in documents:
         staged.problems.extend(result.problems)
         for block in result.consignments:
@@ -521,6 +526,10 @@ def _check_grain(staged: StagedRound, log: ProblemLog) -> None:
                 f"Account sale {record.display_number} has a nett of R{nett} and no product "
                 "breakdown, so it can never be reconciled against the sales side."
             )
+            continue
+        if number in staged.carried_account_sales:
+            # Accounted for in an earlier round. Its absence from this one's sales documents is
+            # not a loose end, and reporting it as one every round afterwards is noise.
             continue
         if not [r for r in staged.rows if r.account_sale == number]:
             log.warn(

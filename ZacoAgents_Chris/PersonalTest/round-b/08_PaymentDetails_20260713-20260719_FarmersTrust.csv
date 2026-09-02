@@ -1,0 +1,8 @@
+FMS ID,Supplier Ref,Acc Sales Number,Date,Nett Payment,Total Deductions,Deduction VAT,Gross Payments,Payment Ref
+Market,TSHWANE MARKET,,Agent,Farmers Trust (Pre)
+
+204110,20026*14930,PRE*BT*390200,2026-07-20,2358.75,361.96,54.29,2775.00,EFT
+,,,Line No,Supplier Ref,Commodity,Delivered,Sold,Sales Total
+,,,01,20026*14930,LEMONS EUREKA CLASS 1 MEDIUM STANDARD CARTON 15kg,80,25,1200.00
+,,,02,20026*14955,PAWPAW CLASS 1 MEDIUM STANDARD CARTON 8kg,45,45,1575.00
+,,,,Total Sales: ,,,,2775.00

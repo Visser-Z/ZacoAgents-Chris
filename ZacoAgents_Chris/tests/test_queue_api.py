@@ -490,3 +490,23 @@ def test_answering_the_queue_needs_the_resolve_permission(client: TestClient, db
 
 def test_a_signed_out_caller_cannot_save_a_round(client: TestClient) -> None:
     assert client.post("/api/rounds", files=_files(ROUND_ONE)).status_code == 401
+
+
+def test_a_minted_number_cannot_reissue_one_an_earlier_round_approved(
+    operator: TestClient, resolved_one: Any
+) -> None:
+    """Two loads under one delivery note would look entirely normal in the book."""
+    already = {n["dn"] for n in resolved_one["delivery_notes"] if n["dn"]}
+    assert already
+
+    body = _create(operator, ROUND_TWO)
+    proposed = {i["proposal"] for i in _items(body, "delivery_note") if i["proposal"]}
+    assert not (proposed & already)
+
+
+def test_the_refusal_names_the_file_that_could_not_be_read(operator: TestClient) -> None:
+    """With five files uploaded at once, "one of these is unreadable" is not an answer."""
+    files = [*_files(ROUND_ONE), ("files", ("notes.txt", b"prose about fruit", "text/plain"))]
+    response = operator.post("/api/rounds", files=files)
+    assert response.status_code == 422
+    assert response.json()["detail"]["detail"].startswith("notes.txt:")

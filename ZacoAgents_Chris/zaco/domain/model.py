@@ -371,6 +371,14 @@ class StagedRound:
     proven_links: list[tuple[str, str, str]] = field(default_factory=list)
     """(sales name, statement name, the evidence) for links an account sale proved."""
 
+    carried_account_sales: set[str] = field(default_factory=set)
+    """Account sales an earlier round already settled.
+
+    Held so this round can be compared against them without their absence from *this* round's
+    sales documents being reported as "paid, and nothing accounts for it" -- something already
+    accounted for last month is not a loose end.
+    """
+
     @property
     def consignments(self) -> list[Consignment]:
         return [c for d in self.deliveries.values() for c in d.consignments]

@@ -1,0 +1,49 @@
+    VAT Reg. No. 4250103472                                     AFREKENINGSTAAT
+    P.O. BOX/POSBUS 1539
+                                                                ACCOUNT SALES
+    PRETORIA 0001
+                                                               BELASTINGFAKTUUR
+    TEL: (012) 323 2000                                           TAX INVOICE
+
+    AGENT VAT REGISTRATION NUMBER: 4250103472
+
+                              TAX INVOICE
+                                BT390110     ACCOUNT SALES NO : 390110
+
+    PRODUCER : 038979 k2024700521 trading as Zaco DATE : 13/07/2026 Page: 1
+             EGYPT
+                                             DELIVERY NOTE NO : 203600
+             0148                                     REFNO :    14930
+    Vat Reg No :                               DATE RECEIVED : 05/07/2026
+                                         PREVIOUS ACCOUNT SALES NO : 390100
+    MARKET GRN : 20410201 QUANTITY RECEIVED : 80 QUANTITY B/F : 50
+    PRODUCT : LEEU 1M CT15 LEMON EUREKA SMAN : BRANDON BRONKHORST
+
+    DATE      PRICES        AVER.PRICE MARKET AVG  QUANTITY      VALUE
+    ----        ------      ---------- ----------  --------   --------
+    13/07/2026 45.00 - 45.00  45.00    0.00          20     900.00
+                            ----------             --------   --------
+                               45.00                   20     900.00
+    QUANTITY OUTSTANDING : 60      AGENT COMM % : 7.50
+
+    MARKET GRN : 20410202 QUANTITY RECEIVED : 40 QUANTITY B/F : 40
+    PRODUCT : PIQU 1M CT10 PINEAPPLE QUEEN SMAN : BRANDON BRONKHORST
+
+    DATE      PRICES        AVER.PRICE MARKET AVG  QUANTITY      VALUE
+    ----        ------      ---------- ----------  --------   --------
+    13/07/2026 55.00 - 55.00  55.00    0.00          35     1925.00
+                            ----------             --------   --------
+                               55.00                   35     1925.00
+    QUANTITY OUTSTANDING : 5      AGENT COMM % : 7.50
+
+    -----------------------------------------------------------------------------
+    VAT (OUTPUT) COLLECTED                                       0.00
+    -----------------------------------------------------------------------------
+                 ** FINAL PAYMENT **     ** TOTAL SOLD ** 55
+    COSTS                                               CURRENT SALES
+    -----                                                ------------
+    DEDUCTION          AMOUNT VAT (INPUT) TOTAL
+    ---------         -------- --------- --------
+    MARKET FEES        368.48     55.27   423.75 GROSS AMOUNT 2825.00
+    -----------------------------------------------------------------------------
+                                                 NETT AMOUNT   2401.25

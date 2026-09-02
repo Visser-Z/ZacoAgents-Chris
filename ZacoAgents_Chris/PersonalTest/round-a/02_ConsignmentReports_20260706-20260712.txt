@@ -1,0 +1,50 @@
+    Consignment Reports                                Zaco Agents (Pty) Ltd (20026)
+
+    Report:   Daily Sales Detail                          Run Date: 2026/07/13 08:02:11
+
+    Market:   ALL
+    Agent:    ALL
+    Product:  ALL
+    Date Range: 2026/07/06 - 2026/07/12
+
+    TSHWANE MARKET      Farmers Trust (Pre)
+    Delivery ID: 2200100Z Supplier Ref: 20026*14930 Qty Sent: 80 Qty Amended To: Qty Avail: 80
+    Consignment ID: 220010001Z Comment:
+    Product:  LEMONS EUREKA CLASS 1 MEDIUM STANDARD CARTON 15kg
+      Date Sold  Docket Number Qty Sold Market Avg     Price       Sales Value
+    2026-07-06 PRE*B7E01C41001*01Z  30        R 0.00         R 40.00     R 1,200.00
+    2026-07-09 PRE*B7E02C41002*01Z  20        R 0.00         R 45.00     R 900.00
+                                    50                                   R 2,100.00
+
+    TSHWANE MARKET      Farmers Trust (Pre)
+    Delivery ID: 2200200Z Supplier Ref:  Qty Sent: 50 Qty Amended To: Qty Avail: 48
+    Consignment ID: 220020002Z Comment:
+    Product:  MANGOES TOMMY ATKINS CLASS 1 LARGE STANDARD TRAY 4kg
+      Date Sold  Docket Number Qty Sold Market Avg     Price       Sales Value
+    2026-07-07 PRE*B7E01C41001*02Z  25        R 0.00         R 60.00     R 1,500.00
+    2026-07-08 PRE*B7E02C41002*02Z  -5        R 0.00         R 60.00     R -300.00
+                                    20                                   R 1,200.00
+
+    TSHWANE MARKET      Farmers Trust (Pre)
+    Delivery ID: 2200300Z Supplier Ref: 20026*20026 Qty Sent: 30 Qty Amended To: Qty Avail: 30
+    Consignment ID: 220030003Z Comment:
+    Product:  WATERMELON CLASS 1 EACH
+      Date Sold  Docket Number Qty Sold Market Avg     Price       Sales Value
+    2026-07-07 PRE*B7E01C41001*03Z  10        R 0.00         R 25.00     R 250.00
+                                    10                                   R 250.00
+
+    TSHWANE MARKET      Farmers Trust (Pre)
+    Delivery ID: 2200400Z Supplier Ref: 20026*30055 Qty Sent: 40 Qty Amended To: Qty Avail: 40
+    Consignment ID: 220040004Z Comment:
+    Product:  PINEAPPLES QUEEN CLASS 1 MEDIUM CARTON 10kg
+      Date Sold  Docket Number Qty Sold Market Avg     Price       Sales Value
+    2026-07-09 PRE*B7E01C41001*04Z  35        R 0.00         R 55.00     R 1,925.00
+                                    35                                   R 1,925.00
+
+    JOBURG MKT - TFRESH      Subtropico (Jhb)
+    Delivery ID: 2200500Z Supplier Ref: 30055*14940 Qty Sent: 60 Qty Amended To: Qty Avail: 60
+    Consignment ID: 220050005Z Comment:
+    Product:  BANANAS CLASS 1 STANDARD CARTON 18kg
+      Date Sold  Docket Number Qty Sold Market Avg     Price       Sales Value
+    2026-07-08 PRE*B7E01C41001*05Z  40        R 0.00         R 70.00     R 2,800.00
+                                    40                                   R 2,800.00
