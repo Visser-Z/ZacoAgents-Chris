@@ -28,6 +28,11 @@ The compose stack is:
 Volumes `zaco_workbook` and `zaco_backups` hold the operator's live workbook and its snapshots.
 They survive `docker compose down`; `docker compose down -v` destroys them.
 
+On a **fresh** volume the app copies `workbook/account-sales-book.xlsx` into it once, so the
+delivery note series has somewhere to come from on the very first round. It never overwrites a
+book that is already there: that file is what the business settles money against, and clobbering
+it on a restart would be the worst thing this system could do.
+
 ### About the sidecar
 
 It is parity, not the guarantee. The snapshot that actually protects the workbook is taken
@@ -93,16 +98,51 @@ nothing if a shared account made the choice. See [DECISIONS.md](DECISIONS.md) D1
 
 No mail is sent. Copy the invitation link from the Accounts page and pass it on.
 
+## Working a round
+
+1. **Stage a round** (`/staged`) reads a set of documents and shows what they amount to. Nothing
+   is stored. Useful for checking an export before committing to it.
+2. **Resolution queue** (`/queue`) saves a round and opens its questions. Four kinds, asked in
+   this order because answering one can remove another:
+
+   | | What it asks | Why no document answers it |
+   |---|---|---|
+   | Product links | are these two names the same fruit? | the reports and the statements use different vocabularies |
+   | Product codes | what is Zaco's short code? | column G is the operator's own, and is in no report |
+   | Delivery notes | which DN covers this delivery? | column A is Zaco's; the agent's `DELIVERY NOTE NO` is its own number |
+   | Disagreements | which document is right, and why? | two exports described one record differently |
+
+   Every card carries the evidence it was raised on and, for a delivery note, the proposal with
+   the three tests that produced it. Nothing is applied until someone approves it, and the round
+   cannot be closed while anything is open.
+3. **Close the queue.** The round becomes `resolved` and its rows are ready for the workbook.
+   Appending them is Phase 4.
+
+Answers are remembered. A short code captured once is never asked for again; a rejected link is
+never re-offered; a delivery note approved for a delivery holds. What a resolved round counted is
+also remembered, which is what stops the June export -- which reprints two of May's dockets
+verbatim -- from counting the same 65 cartons twice.
+
 ## Where things are
 
 ```
 zaco/config.py         every environment-dependent value in the system, and nothing else
 zaco/api/              /api/* JSON endpoints; the OpenAPI schema is at /docs
+zaco/ingest/           the five readers and the content-based classifier
+zaco/domain/           the grain: delivery -> consignment -> docket, and the workbook row
+zaco/resolve/          the queue: delivery notes, product codes, opening stock, disagreements
+zaco/workbook/         locating the operator's sheet and columns by header text, never position
 zaco/web/              the built-in interface: a thin client over those same endpoints
 zaco/db/               SQLAlchemy models; money is NUMERIC(14,2) and Decimal, never float
 migrations/            Alembic
 tests/                 fixtures are the real files in data/, never tidied ones
 ```
+
+A saved round stores the **documents themselves**, and the deliveries, consignments and rows are
+re-derived from them each time. What the agent sent is the only thing that cannot be recomputed;
+a correction to a reader then improves the whole history instead of leaving stale rows behind it.
+What *is* stored is the part no document contains — the answers, each with a person's name on
+it.
 
 The interface calls only documented `/api/*` endpoints, so a React or Flutter frontend can be
 added later with nothing but CORS and the schema (D1).

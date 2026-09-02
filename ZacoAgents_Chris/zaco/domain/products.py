@@ -25,6 +25,7 @@ The rule this module follows: **two names are merged only on evidence, never on 
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import StrEnum
 
@@ -157,11 +158,27 @@ class ProductRegistry:
     and later B to C gives the same result as any other order.
     """
 
-    def __init__(self, short_codes: dict[str, str] | None = None) -> None:
+    def __init__(
+        self,
+        short_codes: dict[str, str] | None = None,
+        rejected_links: Iterable[tuple[str, str]] | None = None,
+    ) -> None:
         self._parent: dict[str, str] = {}
         self._identities: dict[str, ProductIdentity] = {}
         # Keyed on the raw name as `lookup/product-codes.json` writes it.
         self._short_codes = {normalise(k): v for k, v in (short_codes or {}).items()}
+        # Pairs an operator has already said are *not* the same product. Held unordered,
+        # because "are these two the same" is the same question whichever way round it is put.
+        self._rejected: set[frozenset[str]] = {
+            frozenset((normalise(a), normalise(b))) for a, b in (rejected_links or ())
+        }
+
+    def reject(self, left_raw: str, right_raw: str) -> None:
+        """Record that these two names are not the same product, so it is never asked again."""
+        self._rejected.add(frozenset((normalise(left_raw), normalise(right_raw))))
+
+    def is_rejected(self, left_raw: str, right_raw: str) -> bool:
+        return frozenset((normalise(left_raw), normalise(right_raw))) in self._rejected
 
     # --- registration -------------------------------------------------------------------------
 
@@ -194,9 +211,18 @@ class ProductRegistry:
         self._apply_short_code(left)
         return left
 
-    def set_short_code(self, raw: str, code: str) -> ProductIdentity:
-        """Record the operator's own code for a product. Remembered from then on."""
-        identity = self.observe(raw, Vocabulary.SALES)
+    def set_short_code(
+        self, raw: str, code: str, vocabulary: Vocabulary = Vocabulary.SALES
+    ) -> ProductIdentity:
+        """Record the operator's own code for a product. Remembered from then on.
+
+        The code is written against **every** name the identity answers to, so that a later
+        round naming the same fruit from its other vocabulary resolves without being asked.
+        A name already known keeps the vocabulary it was first seen in; `vocabulary` is only
+        consulted when the name is new, so capturing a code cannot relabel where a name came
+        from.
+        """
+        identity = self.identity_for(raw) or self.observe(raw, vocabulary)
         identity.short_code = code
         for name in identity.names:
             self._short_codes[name] = code
@@ -222,13 +248,16 @@ class ProductRegistry:
 
         Only crosses vocabularies: two names in the same vocabulary that share fruit words are
         usually genuinely different lines (`CLASS 1` against `CLASS 2`), and proposing to merge
-        those would be worse than useless.
+        those would be worse than useless. Pairs an operator has already rejected are dropped:
+        a queue that re-asks a question already answered trains the reader to click through it.
         """
         found: list[LinkSuggestion] = []
         items = self.identities
         for index, left in enumerate(items):
             for right in items[index + 1 :]:
                 if left.vocabularies == right.vocabularies:
+                    continue
+                if frozenset((left.key, right.key)) in self._rejected:
                     continue
                 shared = self._signature(left) & self._signature(right)
                 if not shared:

@@ -138,13 +138,22 @@ in the system and shown in the UI and in reports. Nothing pollutes the operator'
 
 A row is flagged "this reference is provably not a delivery note" **only on positive evidence.**
 
-In the supplied data that is 3 of 12 deliveries:
+**Corrected in Phase 3, once the readers had actually run.** There are 11 deliveries, not 12,
+and the flag falls on **2** of them:
 
-| Supplier Ref | Evidence |
-|---|---|
-| `20026*20026` (apples) | reference half equals Zaco's own producer code |
-| `20026*00000` (nectarines) | all zeros, and the sales report has this delivery's ref blank |
-| `20026*14013` (plums) | `14013` is a producer code — it is the producer half of `14013*14710` |
+| Supplier Ref | Delivery | Evidence |
+|---|---|---|
+| `20026*20026` (apples) | `1183050Z` | reference half equals Zaco's own producer code |
+| `20026*14013` (plums) | `1183001Z` | `14013` is a producer code — the producer half of `14013*14710` |
+
+`20026*00000` is real and is still counter-evidence, but it appears **only on the payment side**
+(FMS `203452` and `203454`), and the payment record names no delivery. The nectarine delivery it
+probably belongs to, `1181705Z`, carries a **blank** Supplier Ref in every sales document.
+
+That distinction is kept rather than smoothed over. A blank is **absence**, and "provably not a
+delivery note" is a claim; making it about a blank would be asserting something no document
+supports. Both deliveries end up with a minted number — the same answer for different reasons,
+and the queue says which.
 
 The other nine carry no flag. §7 is explicit: "a warning on every row is a warning nobody reads
 by the second week."
@@ -226,9 +235,12 @@ updated as they are settled.
 2. **Does Zaco issue a DN for another producer's produce?** See D11. Currently asked per
    delivery.
 
-3. **Is the `14xxx` DN series contiguous?** Minting the next free number assumes it is. The
-   workbook shows `14690`, `14691`, `14692`; the refs show `14700`–`14892` with gaps. If the
-   series is not Zaco's to allocate, minting must be replaced by capture.
+3. **Is the `14xxx` DN series contiguous?** Still open, and Phase 3 chose the safe reading:
+   minting goes **above everything known**, never into the gaps. A gap is at least as likely to
+   be a delivery note written on paper and never entered as it is to be free, and reusing one
+   would put two loads under one number in the book the business settles money against. With no
+   workbook and no approved DN there is no series at all, and minting **refuses** rather than
+   inventing `14000` — the queue asks for the number instead.
 
 4. **What does `AGENT COMM % : 7.50` mean on the account sales statements?** No settlement in the
    data reconciles to 7.5%. Actual deductions run ~15% of gross, with outliers at 16.67%, 20.3%
@@ -240,6 +252,53 @@ updated as they are settled.
    Subtropico block reads `Destination` where the consignment report says `JOBURG MKT - TFRESH`.
    The market is recovered from a sibling report keyed on agent where one exists; where none
    does, the field is left empty and flagged rather than assumed.
+
+---
+
+## Settled while building Phase 3
+
+**S1 — What the durable record actually stores.** A round is saved as the **documents
+themselves**, byte for byte, and the deliveries, consignments and rows are re-derived from them
+whenever the round is looked at. What the agent sent is the only thing that cannot be
+recomputed; everything else is a consequence of it. A correction to a reader then improves the
+whole history rather than leaving stale derived rows behind it, and a stored balance can never
+drift from what the documents say while still adding up. Answers — codes, links, approved
+delivery notes, settled disagreements — are stored, because those are the part no document
+contains.
+
+**S2 — Where captured product codes live.** In the database. `lookup/product-codes.json` is a
+**seed**, read at boot and never written back: it is an input the operator supplied, and a system
+that edits its own inputs leaves a trail nobody can follow. Where the two disagree the database
+wins, and the full list is downloadable so the operator can update their own file if they want.
+
+**S3 — Product identity is global; the questions are not.** Every product name any round has
+contained is remembered, so the sales name and the statement name for one fruit can be offered as
+a link even when they arrive weeks apart — the plums sell in one round and their statement lands
+in the next. The **queue**, though, only ever asks about products in the round in front of it.
+Blocking a round on a product that appears nowhere in it would be a queue nobody could clear.
+
+**S4 — A link a document proved is written down.** Account sale 382405 names both
+`CHERRIES OTHER CLASS 1 LARGE (HALF TRAY 2.5kg)` and `CHOT 1L HT25 CHERRY OTHER` for R400. That
+statement is in one round only, and the cherries go on selling in the next. Re-deriving the proof
+each round would mean the cherries losing their short code the moment the document that proved it
+is no longer in front of us, so proven links are stored — marked as evidence rather than as
+somebody's judgement, so the two are never confused.
+
+**S5 — The overlap between rounds is real, and it double-counts.**
+`DailySalesDetail_20260601-20260608.csv` **reprints, verbatim**, two nectarine dockets that
+`DailySalesDetail_20260525-20260531.csv` already carried. Read as two independent rounds, the
+book gains 65 cartons and R3,500 that never happened — and looks entirely normal doing it.
+Deduplication within one round was not enough: the composite docket identity of D12 now holds
+across the round boundary too, and every sale a resolved round counted is skipped, visibly, when
+a later export prints it again.
+
+**S6 — A statement and its payment record are one account sale.** The statement prints `382405`;
+the payment side and every docket write `PRE*BT*382405`. Kept apart, one payment run became two
+records and the second was reported as "paid but no sales document accounts for it" — a warning
+about a state that is not real, which is worse than no warning at all. They are matched only when
+**exactly one** payment reference ends with the statement's number: two agents could each close
+an account sale numbered 382405, and quietly picking one would put a statement's nett against
+another agent's sales.
 
 ---
 
@@ -265,3 +324,7 @@ Recorded here as they were found; expanded on in `NOTES.md`.
    (`JOH*SUB*5640001/12026-04-13`); three date formats plus `0000-00-00`.
 8. `20026*14705 & 14706` — one payment against two references, proving DN↔delivery is
    one-to-many and cannot be derived even in principle.
+9. **The two Daily Sales Detail exports overlap.** The June file reprints May's nectarine dockets
+   unchanged (S5). Nothing in the brief suggests the exports are disjoint, and they are not.
+10. The workbook's `Baby Stock` is `=I-K` in the live file — `Opening Stock` minus `Cartons Sold`
+    — not the `=H-J` the brief's column letters imply. Another consequence of finding 1.

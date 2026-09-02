@@ -7,15 +7,12 @@ written into the book.
 
 from __future__ import annotations
 
-from decimal import Decimal
-
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 
+from zaco.api import render
 from zaco.api.routes_ingest import MAX_UPLOAD_BYTES
 from zaco.api.schemas import (
     AccountSaleOut,
-    CartonsOut,
-    ConsignmentOut,
     DeliveryOut,
     ProblemOut,
     ProductOut,
@@ -28,7 +25,7 @@ from zaco.auth.deps import requires
 from zaco.auth.permissions import Permission
 from zaco.db.models import User
 from zaco.domain.build import build_round
-from zaco.domain.model import Cartons, Consignment, Delivery, Row, StagedRound
+from zaco.domain.model import Delivery, Row, StagedRound
 from zaco.domain.products import ProductRegistry
 from zaco.ingest.classifier import UnrecognisedDocumentError, read_document
 
@@ -87,12 +84,12 @@ def _to_out(staged: StagedRound, registry: ProductRegistry) -> StagedRoundOut:
             "account_sales": str(len(staged.account_sales)),
             # Once per consignment, never once per row. Labelled in the interface so the
             # difference is visible rather than assumed.
-            "cartons_sent": _number(staged.cartons_sent),
-            "value": _money(staged.value),
+            "cartons_sent": render.number(staged.cartons_sent),
+            "value": render.money(staged.value),
             "unpaid_dockets": str(len(staged.unpaid_dockets)),
             "products_unresolved": str(len(registry.unresolved)),
         },
-        cartons=_cartons(staged.cartons),
+        cartons=render.cartons(staged.cartons),
         deliveries=[_delivery(d) for d in staged.deliveries.values()],
         rows=[_row(r) for r in staged.rows],
         account_sales=[
@@ -102,8 +99,8 @@ def _to_out(staged: StagedRound, registry: ProductRegistry) -> StagedRoundOut:
                 market=record.market,
                 agent=record.agent,
                 date_paid=record.date_paid,
-                nett=_optional_money(record.nett),
-                gross=_optional_money(record.gross),
+                nett=render.optional_money(record.nett),
+                gross=render.optional_money(record.gross),
                 deduction_share=(
                     None
                     if record.deduction_share is None
@@ -134,8 +131,8 @@ def _to_out(staged: StagedRound, registry: ProductRegistry) -> StagedRoundOut:
                 consignment_id=consignment.consignment_id,
                 docket_number=docket.docket_number,
                 date_sold=docket.date_sold,
-                quantity=_optional_number(docket.quantity),
-                value=_optional_money(docket.value),
+                quantity=render.optional_number(docket.quantity),
+                value=render.optional_money(docket.value),
             )
             for consignment, docket in staged.unpaid_dockets
         ],
@@ -160,26 +157,8 @@ def _delivery(delivery: Delivery) -> DeliveryOut:
         reference_half=delivery.reference_half,
         market=delivery.market,
         agent=delivery.agent,
-        qty_sent=_number(delivery.qty_sent),
-        consignments=[_consignment(c) for c in delivery.consignments],
-    )
-
-
-def _consignment(consignment: Consignment) -> ConsignmentOut:
-    return ConsignmentOut(
-        consignment_id=consignment.consignment_id,
-        product=consignment.product.display_name,
-        short_code=consignment.product.short_code,
-        market=consignment.market,
-        agent=consignment.agent,
-        qty_sent=_optional_number(consignment.qty_sent),
-        qty_available=_optional_number(consignment.qty_available),
-        cartons=_cartons(consignment.cartons),
-        value=_money(consignment.value),
-        docket_count=len(consignment.dockets),
-        account_sales=consignment.account_sales,
-        days_on_market=consignment.days_on_market,
-        is_identifiable=consignment.is_identifiable,
+        qty_sent=render.number(delivery.qty_sent),
+        consignments=[render.consignment(c) for c in delivery.consignments],
     )
 
 
@@ -190,42 +169,11 @@ def _row(row: Row) -> RowOut:
         product=row.product.display_name,
         short_code=row.product.short_code,
         account_sale=row.account_sale,
-        account_sale_display=_display_account_sale(row.account_sale),
+        account_sale_display=render.display_account_sale(row.account_sale),
         market=row.market,
         agent=row.agent,
-        cartons=_cartons(row.cartons),
-        value=_money(row.value),
-        price=_optional_money(row.price),
+        cartons=render.cartons(row.cartons),
+        value=render.money(row.value),
+        price=render.optional_money(row.price),
         earliest_date=row.earliest_date,
     )
-
-
-def _display_account_sale(number: str) -> str:
-    """D7: the bare number where one exists, the full reference where it does not."""
-    tail = number.rsplit("*", 1)[-1] if "*" in number else number
-    return tail if tail.isdigit() else number
-
-
-def _cartons(cartons: Cartons) -> CartonsOut:
-    return CartonsOut(
-        sold=_number(cartons.sold),
-        returned=_optional_number(cartons.returned),
-        net=_number(cartons.net),
-        returns_reportable=cartons.returns_reportable,
-    )
-
-
-def _number(value: Decimal) -> str:
-    return f"{value:g}"
-
-
-def _optional_number(value: Decimal | None) -> str | None:
-    return None if value is None else f"{value:g}"
-
-
-def _money(value: Decimal) -> str:
-    return f"R{value:,.2f}"
-
-
-def _optional_money(value: Decimal | None) -> str | None:
-    return None if value is None else f"R{value:,.2f}"

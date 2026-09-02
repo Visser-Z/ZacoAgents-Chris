@@ -9,6 +9,7 @@ models fails here rather than on a deploy.
 from __future__ import annotations
 
 import os
+import shutil
 from collections.abc import Iterator
 from pathlib import Path
 
@@ -33,6 +34,14 @@ def _configure_environment(tmp_root: Path) -> None:
     os.environ["WORKBOOK_DIR"] = str(tmp_root / "workbook")
     os.environ["BACKUP_DIR"] = str(tmp_root / "backups")
     os.environ.setdefault("ALLOWED_EMAIL_DOMAINS", "")
+
+    # A copy of the operator's real book, never the original. Phase 3 reads it for the delivery
+    # notes already linked to account sales and for where the 14xxx series sits; Phase 4 appends
+    # to it. Tests that touched the real file would be one bug away from destroying the
+    # deliverable, so the fixture copies it and the copy is what everything writes to.
+    workbook = tmp_root / "workbook"
+    workbook.mkdir(parents=True, exist_ok=True)
+    shutil.copy(REPO_ROOT / "workbook" / "account-sales-book.xlsx", workbook)
 
     from zaco.config import get_settings
 
@@ -81,7 +90,12 @@ def clean_db(migrated: str) -> Iterator[None]:
 
     engine = get_engine()
     with engine.begin() as connection:
-        connection.execute(text("TRUNCATE invitations, users RESTART IDENTITY CASCADE"))
+        connection.execute(
+            text(
+                "TRUNCATE suspensions, round_documents, rounds, product_codes, product_names, "
+                "product_decisions, delivery_notes, invitations, users RESTART IDENTITY CASCADE"
+            )
+        )
     yield
 
 

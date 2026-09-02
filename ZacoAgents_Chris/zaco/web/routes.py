@@ -34,7 +34,7 @@ router = APIRouter(include_in_schema=False)
 NAV = [
     ("/rounds", "Read a document", Permission.INGEST, None),
     ("/staged", "Stage a round", Permission.INGEST, None),
-    ("/queue", "Resolution queue", Permission.RESOLVE, "Phase 3"),
+    ("/queue", "Resolution queue", Permission.RESOLVE, None),
     ("/workbook", "Workbook", Permission.APPEND, "Phase 4"),
     ("/reconciliation", "Reconciliation", Permission.VIEW_REPORTS, "Phase 5"),
     ("/settlement", "Settlement", Permission.RECORD_TERMS, "Phase 5"),
@@ -110,3 +110,14 @@ def staged_page(
     if not user.can(Permission.INGEST):
         return _page(request, "forbidden.html", user, needed=Permission.INGEST)
     return _page(request, "staged.html", user)
+
+
+@router.get("/queue", response_model=None)
+def queue_page(
+    request: Request, user: User | None = Depends(current_user_optional)
+) -> HTMLResponse | RedirectResponse:
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    if not user.can(Permission.RESOLVE):
+        return _page(request, "forbidden.html", user, needed=Permission.RESOLVE)
+    return _page(request, "queue.html", user)

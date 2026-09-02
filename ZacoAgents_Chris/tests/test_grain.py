@@ -357,3 +357,74 @@ def test_the_supplier_ref_is_split_into_producer_and_reference(everything) -> No
     other_producer = staged.deliveries["1182465Z"]
     assert other_producer.producer_code == "14013"
     assert other_producer.reference_half == "14710"
+
+
+# --- one payment run is one record (Phase 3 correction) ------------------------------------------
+
+
+def test_a_statement_and_its_payment_record_are_one_account_sale(everything) -> None:  # type: ignore[no-untyped-def]
+    """The statement prints `382405`; the payment side and every docket write `PRE*BT*382405`.
+
+    Kept apart, one payment run becomes two records and the second is reported as "paid but no
+    sales document accounts for it" -- a warning about a state that is not real, which is worse
+    than no warning at all.
+    """
+    staged, _ = everything
+    assert "382405" not in staged.account_sales
+    record = staged.account_sales["PRE*BT*382405"]
+    assert record.also_known_as == ["382405"]
+    assert record.gross == Decimal("400.00")
+    assert record.nett == Decimal("340.00")
+
+
+def test_only_the_account_sale_that_really_has_no_sales_is_reported_as_such(everything) -> None:  # type: ignore[no-untyped-def]
+    """382900 appears in no other document at all. 382405 does, and must not be flagged."""
+    staged, _ = everything
+    flagged = [
+        p.message for p in staged.problems if "no sales document accounts for it" in p.message
+    ]
+    assert len(flagged) == 1
+    assert "382900" in flagged[0]
+
+
+def test_a_statement_that_could_belong_to_two_agents_is_left_alone(everything) -> None:  # type: ignore[no-untyped-def]
+    """Two agents could each close an account sale numbered 382405.
+
+    Quietly picking one would put a statement's nett against another agent's sales, so the
+    match is only made when exactly one payment reference ends with the statement's number.
+    """
+    from zaco.domain.build import _statement_match
+    from zaco.domain.model import AccountSale, StagedRound
+    from zaco.ingest.problems import ProblemLog
+
+    staged = StagedRound()
+    staged.account_sales["PRE*BT*382405"] = AccountSale(number="PRE*BT*382405")
+    staged.account_sales["JOH*SUB*382405"] = AccountSale(number="JOH*SUB*382405")
+    log = ProblemLog()
+    assert _statement_match(staged, "382405", log) is None
+    assert any("would be a guess" in p.message for p in log.items)
+
+
+def test_an_identical_repeat_is_recorded_so_it_can_be_shown(everything) -> None:  # type: ignore[no-untyped-def]
+    """D12: a skip nobody can see is indistinguishable from a record that went missing."""
+    staged, _ = everything
+    subjects = {s.subject_key for s in staged.skipped}
+    assert {"PRE*BT*382860", "PRE*BT*382880", "PRE*BT*382885"} <= subjects
+    assert all(s.subject_kind == "account_sale" for s in staged.skipped)
+
+
+def test_a_link_an_account_sale_proved_is_kept_so_it_can_be_written_down(everything) -> None:  # type: ignore[no-untyped-def]
+    staged, _ = everything
+    assert len(staged.proven_links) == 1
+    sales_name, statement_name, evidence = staged.proven_links[0]
+    assert "CHERRIES OTHER" in sales_name
+    assert "CHOT 1L HT25" in statement_name
+    assert "382405" in evidence
+
+
+def test_every_product_name_the_documents_carried_is_remembered(everything) -> None:  # type: ignore[no-untyped-def]
+    """Identity is global; without the names, a link can only be offered when both sides
+    happen to fall in the same upload."""
+    staged, _ = everything
+    assert any("NEOT 1L MA50" in name for name in staged.products_seen)
+    assert any("NECTARINES OTHER" in name for name in staged.products_seen)

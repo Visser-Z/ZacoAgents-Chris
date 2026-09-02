@@ -19,9 +19,11 @@ from zaco.domain.model import (
     AccountSale,
     Consignment,
     Delivery,
+    Disagreement,
     DocketFact,
     Evidence,
     Row,
+    SkippedDuplicate,
     StagedRound,
 )
 from zaco.domain.products import ProductIdentity, ProductRegistry, Vocabulary
@@ -53,19 +55,29 @@ def load_short_codes(path: Path | None = None) -> dict[str, str]:
 def build_round(
     documents: list[tuple[str, ParseResult]],
     registry: ProductRegistry | None = None,
+    already_counted: set[tuple[str, str, str, str]] | None = None,
 ) -> tuple[StagedRound, ProductRegistry]:
-    """Assemble one round. `documents` is (filename, parse result), in upload order."""
+    """Assemble one round. `documents` is (filename, parse result), in upload order.
+
+    `already_counted` is every sale the rounds before this one have counted. It matters because
+    the exports **overlap**: `DailySalesDetail_20260601-20260608.csv` reprints, verbatim, the
+    two nectarine dockets that `DailySalesDetail_20260525-20260531.csv` already carried. Reading
+    the two rounds independently counts those 65 cartons and R3,500 twice, and a book that has
+    them twice looks entirely normal. Deduplication inside one round is not enough; the rule has
+    to hold across the boundary as well (D12).
+    """
     registry = registry or ProductRegistry(load_short_codes())
     log = ProblemLog()
     staged = StagedRound(sources=[name for name, _ in documents])
     statements: list[AccountSalesStatement] = []
 
+    counted = set(already_counted or ())
     for name, result in documents:
         staged.problems.extend(result.problems)
         for block in result.consignments:
-            _add_consignment(staged, registry, block, result.kind, name, log)
+            _add_consignment(staged, registry, block, result.kind, name, log, counted)
         for statement in result.statements:
-            _add_statement(staged, registry, statement)
+            _add_statement(staged, registry, statement, log)
             statements.append(statement)
         for payment in result.payments:
             _add_payment(staged, registry, payment, name, log)
@@ -89,8 +101,11 @@ def _add_consignment(
     kind: DocumentKind,
     source: str,
     log: ProblemLog,
+    already_counted: set[tuple[str, str, str, str]] | None = None,
 ) -> None:
-    product = registry.observe(block.product_name or "(unnamed product)", Vocabulary.SALES)
+    raw_product = block.product_name or "(unnamed product)"
+    product = registry.observe(raw_product, Vocabulary.SALES)
+    staged.products_seen.append(raw_product)
     delivery = _delivery_for(staged, block)
     consignment = _consignment_for(delivery, block, product)
 
@@ -117,13 +132,29 @@ def _add_consignment(
             source_kind=kind,
             source_name=source,
         )
+        label = f"Docket {fact.docket_number} on consignment {consignment.consignment_id or '?'}"
+
+        if already_counted and fact.identity in already_counted:
+            # Counted by a round that has already been resolved. The export simply reprints it.
+            staged.skipped.append(
+                SkippedDuplicate(
+                    subject_kind="docket",
+                    subject_key=fact.docket_number,
+                    description=(
+                        f"{label} was already counted in an earlier round. {source} reprints it "
+                        "unchanged, so it was not counted again."
+                    ),
+                    source=source,
+                )
+            )
+            continue
+
         seen = known.get(fact.identity)
         if seen is None:
             known[fact.identity] = fact
             consignment.dockets.append(fact)
             continue
 
-        label = f"Docket {fact.docket_number} on consignment {consignment.consignment_id or '?'}"
         if fact.richness > seen.richness:
             # The same sale, told better. A Daily Sales Detail names the account sale a
             # Consignment Report cannot, so the poorer telling is completed rather than kept
@@ -210,6 +241,7 @@ def _add_payment(
     for line in payment.commodities:
         if line.commodity:
             registry.observe(line.commodity, Vocabulary.SALES)
+            staged.products_seen.append(line.commodity)
 
     incoming = AccountSale(
         number=number,
@@ -226,39 +258,79 @@ def _add_payment(
             if payment.commodities
             else None
         ),
+        source_name=source,
     )
 
     existing = staged.account_sales.get(number)
     if existing is None:
         staged.account_sales[number] = incoming
         return
-    _reconcile_duplicate_payment(existing, incoming, source, log)
+    _reconcile_duplicate_payment(staged, existing, incoming, source, log)
+
+
+#: What has to agree for two tellings of one payment run to be the same payment run.
+_PAYMENT_FIGURES = ("nett", "gross", "total_deductions", "date_paid")
 
 
 def _reconcile_duplicate_payment(
-    existing: AccountSale, incoming: AccountSale, source: str, log: ProblemLog
+    staged: StagedRound,
+    existing: AccountSale,
+    incoming: AccountSale,
+    source: str,
+    log: ProblemLog,
 ) -> None:
     """The narrowed re-export overlapping the full one.
 
     Identical figures are the same payment seen twice; different figures are a conflict, and a
-    person decides which document wins (D12). Neither is silently overwritten.
+    person decides which document wins (D12). Neither is silently overwritten, and neither
+    outcome is left in a log: a skip is recorded so it can be shown, and a conflict is recorded
+    so it can be answered.
     """
     differing = [
-        name
-        for name in ("nett", "gross", "total_deductions", "date_paid")
+        (name, _describe(getattr(existing, name)), _describe(getattr(incoming, name)))
+        for name in _PAYMENT_FIGURES
         if getattr(existing, name) != getattr(incoming, name)
     ]
     if differing:
+        staged.disagreements.append(
+            Disagreement(
+                subject_kind="account_sale",
+                subject_key=existing.number,
+                description=(
+                    f"Account sale {existing.display_number} appears in two documents with "
+                    "different figures. Nothing was applied over the earlier one."
+                ),
+                differences=differing,
+                sources=(existing.source_name or "an earlier document", source),
+            )
+        )
         log.warn(
             f"Account sale {existing.display_number} appears twice with different "
-            f"{', '.join(differing)}. {source} was not applied over the earlier document; this "
-            "needs a decision and a reason."
+            f"{', '.join(name for name, _, _ in differing)}. {source} was not applied over the "
+            "earlier document; this needs a decision and a reason."
         )
-    else:
-        log.note(
-            f"Account sale {existing.display_number} appears again in {source} with identical "
-            "figures. It was not recorded twice."
+        return
+
+    staged.skipped.append(
+        SkippedDuplicate(
+            subject_kind="account_sale",
+            subject_key=existing.number,
+            description=(
+                f"Account sale {existing.display_number} appears again with every figure "
+                f"identical to {existing.source_name or 'the earlier document'}. It was counted "
+                "once."
+            ),
+            source=source,
         )
+    )
+    log.note(
+        f"Account sale {existing.display_number} appears again in {source} with identical "
+        "figures. It was not recorded twice."
+    )
+
+
+def _describe(value: object) -> str:
+    return "-" if value is None else str(value)
 
 
 def _add_adjustment(staged: StagedRound, adjustment: NettAdjustment) -> None:
@@ -280,25 +352,59 @@ def _add_adjustment(staged: StagedRound, adjustment: NettAdjustment) -> None:
 
 
 def _add_statement(
-    staged: StagedRound, registry: ProductRegistry, statement: AccountSalesStatement
+    staged: StagedRound,
+    registry: ProductRegistry,
+    statement: AccountSalesStatement,
+    log: ProblemLog,
 ) -> None:
     for product in statement.products:
         if product.product_name:
             registry.observe(product.product_name, Vocabulary.STATEMENT)
+            staged.products_seen.append(product.product_name)
 
     number = statement.account_sale_number
     if not number:
         return
-    record = staged.account_sales.get(number)
+    record = staged.account_sales.get(number) or _statement_match(staged, number, log)
     if record is None:
         record = AccountSale(number=number)
         staged.account_sales[number] = record
+    elif record.number != number and number not in record.also_known_as:
+        record.also_known_as.append(number)
     if record.date_paid is None:
         record.date_paid = statement.statement_date
     if record.nett is None:
         record.nett = statement.nett_amount
     if record.gross is None:
         record.gross = statement.gross_amount
+
+
+def _statement_match(staged: StagedRound, number: str, log: ProblemLog) -> AccountSale | None:
+    """Find the payment-side record a statement is describing.
+
+    A statement prints the bare number (`382405`); the payment side and every docket write the
+    full reference (`PRE*BT*382405`). Kept apart, one payment run becomes two records, and the
+    second is then reported as "paid but no sales document accounts for it" -- a warning about a
+    state that is not real, which is worse than no warning at all.
+
+    Matched only when **exactly one** payment-side reference ends with the statement's number.
+    Two agents could both close an account sale numbered 382405, and quietly picking one would
+    put a statement's nett against another agent's sales.
+    """
+    candidates = [
+        record
+        for key, record in staged.account_sales.items()
+        if key != number and key.endswith(f"*{number}")
+    ]
+    if len(candidates) == 1:
+        return candidates[0]
+    if len(candidates) > 1:
+        log.warn(
+            f"The statement for account sale {number} could belong to "
+            f"{', '.join(c.number for c in candidates)}. It was left on its own rather than "
+            "attached to one of them, because choosing would be a guess."
+        )
+    return None
 
 
 # --- reconciling the two product vocabularies -------------------------------------------------
@@ -335,11 +441,11 @@ def _link_vocabularies(
             sales_name = matches[0].product.display_name
             if sales_name == product.product_name:
                 continue
-            registry.link(
-                sales_name,
-                product.product_name,
-                reason=f"account sale {number} names both for R{product.stated_total_value}",
-            )
+            evidence = f"account sale {number} names both for R{product.stated_total_value}"
+            registry.link(sales_name, product.product_name, reason=evidence)
+            # Kept so the proof can be written down. A link proved by a document does not stop
+            # being true in the next round, and the document that proved it will not be in it.
+            staged.proven_links.append((sales_name, product.product_name, evidence))
             log.note(
                 f"{sales_name!r} and {product.product_name!r} are the same product: account "
                 f"sale {number} names both for R{product.stated_total_value}."

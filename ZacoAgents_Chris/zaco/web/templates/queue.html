@@ -1,0 +1,349 @@
+{% extends "base.html" %}
+{% block title %}Resolution queue — Zaco{% endblock %}
+
+{% block content %}
+<h1>Resolution queue</h1>
+<p class="lede">
+  The facts the reports do not carry. Every card shows what it was raised on and what the system
+  would propose; nothing is applied until you say so, and no round reaches the workbook while
+  anything here is unanswered.
+</p>
+
+<div class="panel">
+  <form id="new-round">
+    <div class="error" data-error hidden></div>
+    <label for="files">Start a round</label>
+    <input id="files" name="files" type="file" multiple>
+    <p class="muted" style="font-size:.88em;margin:.4rem 0 0">
+      Saved and kept. A file already read in an earlier round is stored again but counts nothing,
+      and says so on the summary.
+    </p>
+    <button type="submit">Save the round</button>
+  </form>
+  <div id="rounds" style="margin-top:1rem"></div>
+</div>
+
+<div id="round" hidden></div>
+
+<script>
+(function () {
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  const target = document.getElementById("round");
+  const list = document.getElementById("rounds");
+  const form = document.getElementById("new-round");
+  const errorBox = form.querySelector("[data-error]");
+  let current = null;
+
+  async function json(method, url, body) {
+    const response = await fetch(url, {
+      method,
+      headers: body === undefined ? {} : { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      const d = payload && payload.detail;
+      throw new Error(typeof d === "string" ? d : d ? JSON.stringify(d) : `Failed (${response.status})`);
+    }
+    return payload;
+  }
+
+  async function refreshList() {
+    const rounds = await json("GET", "/api/rounds");
+    list.innerHTML = rounds.length
+      ? `<table><thead><tr><th>Round</th><th>Saved</th><th>By</th><th class="num">Documents</th>
+           <th>Status</th><th></th></tr></thead><tbody>${rounds.map((r) => `
+        <tr>
+          <td class="mono">#${r.id}</td>
+          <td>${esc(r.created_at.slice(0, 16).replace("T", " "))}</td>
+          <td>${esc(r.created_by || "-")}</td>
+          <td class="num">${r.document_count}${r.duplicate_count ? ` <span class="tag">${r.duplicate_count} already read</span>` : ""}</td>
+          <td>${esc(r.status)}</td>
+          <td><button class="link" data-open="${r.id}">Open</button></td>
+        </tr>`).join("")}</tbody></table>`
+      : `<p class="muted">No rounds saved yet.</p>`;
+    list.querySelectorAll("[data-open]").forEach((b) =>
+      b.addEventListener("click", () => open(b.dataset.open)));
+  }
+
+  async function open(id) {
+    current = await json("GET", `/api/rounds/${id}`);
+    draw();
+  }
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    errorBox.hidden = true;
+    const chosen = document.getElementById("files").files;
+    if (!chosen.length) { errorBox.textContent = "Choose the documents first."; errorBox.hidden = false; return; }
+    const button = form.querySelector("button");
+    button.disabled = true;
+    try {
+      const body = new FormData();
+      for (const file of chosen) body.append("files", file);
+      const response = await fetch("/api/rounds", { method: "POST", body, credentials: "same-origin" });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail?.detail || payload.detail || "Refused");
+      current = payload;
+      await refreshList();
+      draw();
+    } catch (error) {
+      errorBox.textContent = error.message; errorBox.hidden = false;
+    } finally { button.disabled = false; }
+  });
+
+  // --- one card per open question --------------------------------------------------------------
+
+  function evidence(item) {
+    return `<table style="margin:.5rem 0">${Object.entries(item.evidence).map(([k, v]) =>
+      `<tr><th style="width:11rem">${esc(k)}</th><td>${esc(v)}</td></tr>`).join("")}</table>`;
+  }
+
+  function tests(item) {
+    if (!item.tests.length) return "";
+    return `<div style="margin:.4rem 0">${item.tests.map((t) =>
+      `<div class="${t.passed ? "muted" : "warning"}" style="font-size:.9em;padding:.25rem .5rem;margin:.15rem 0">
+         ${t.passed ? "✓" : "✗"} <strong>${esc(t.name)}</strong> — ${esc(t.detail)}</div>`).join("")}</div>`;
+  }
+
+  function card(item, index) {
+    const id = `item-${index}`;
+    let action = "";
+
+    if (item.kind === "product_link") {
+      action = `
+        <label for="${id}-why">Why (optional, but it is what the next person reads)</label>
+        <input id="${id}-why" type="text" placeholder="e.g. same fruit, the agent's statement uses its own code">
+        <div style="display:flex;gap:.6rem">
+          <button data-link="accept" data-key="${esc(item.key)}" data-why="${id}-why">Same product</button>
+          <button class="secondary" data-link="reject" data-key="${esc(item.key)}" data-why="${id}-why">Different products</button>
+        </div>`;
+    } else if (item.kind === "product_code") {
+      const options = item.choices.length
+        ? `<datalist id="${id}-codes">${item.choices.map((c) => `<option value="${esc(c)}">`).join("")}</datalist>`
+        : "";
+      action = `
+        ${options}
+        <label for="${id}-code">Zaco's short code (workbook column G)</label>
+        <input id="${id}-code" type="text" ${item.choices.length ? `list="${id}-codes"` : ""} placeholder="e.g. Imp Cherries 5kg">
+        <button data-code="${esc(item.key)}" data-input="${id}-code">Record it</button>`;
+    } else if (item.kind === "delivery_note") {
+      const companions = item.companions.length
+        ? `<fieldset><legend>Same agent, same day — one load?</legend>
+             <p class="muted" style="font-size:.88em;margin:0">
+               Nothing in the documents says these travelled together. Tick any that share this
+               delivery note and give the reason; it is recorded against every one of them.</p>
+             ${item.companions.map((d) => `<label><input type="checkbox" name="${id}-with" value="${esc(d)}"> ${esc(d)}</label>`).join("")}
+           </fieldset>`
+        : "";
+      action = `
+        <label for="${id}-dn">Delivery note number</label>
+        <input id="${id}-dn" type="text" value="${esc(item.proposal || "")}" placeholder="14xxx">
+        ${companions}
+        <label for="${id}-why">Reason (required to overwrite, or to record no DN)</label>
+        <input id="${id}-why" type="text" placeholder="e.g. one truck, three consignments">
+        <div style="display:flex;gap:.6rem;flex-wrap:wrap">
+          <button data-dn="${esc(item.key)}" data-input="${id}-dn" data-why="${id}-why" data-with="${id}-with">Approve</button>
+          <button class="secondary" data-none="${esc(item.key)}" data-why="${id}-why">No DN — carried for another producer</button>
+        </div>`;
+    }
+
+    return `
+      <div class="panel">
+        <div style="display:flex;gap:.6rem;align-items:baseline;flex-wrap:wrap">
+          <span class="tag">${esc(item.kind.replace("_", " "))}</span>
+          <strong>${esc(item.title)}</strong>
+        </div>
+        <p style="margin:.4rem 0 0"><strong>${esc(item.question)}</strong></p>
+        <p class="muted" style="margin:.3rem 0 0;font-size:.93em">${esc(item.reasoning)}</p>
+        ${item.counter_evidence ? `<div class="warning" style="margin:.6rem 0 0">This reference is provably not a delivery note. ${esc(item.counter_evidence)}</div>` : ""}
+        ${evidence(item)}
+        ${tests(item)}
+        ${action}
+      </div>`;
+  }
+
+  // --- actions ------------------------------------------------------------------------------------
+
+  function wire() {
+    const id = current.summary.id;
+    const reload = async () => { current = await json("GET", `/api/rounds/${id}`); draw(); };
+    const value = (elementId) => (document.getElementById(elementId)?.value || "").trim();
+
+    target.querySelectorAll("[data-link]").forEach((b) => b.addEventListener("click", async () => {
+      const [left, right] = b.dataset.key.split("||");
+      try {
+        await json("POST", "/api/products/link", {
+          left, right, accepted: b.dataset.link === "accept", reason: value(b.dataset.why),
+        });
+        await reload();
+      } catch (e) { window.alert(e.message); }
+    }));
+
+    target.querySelectorAll("[data-code]").forEach((b) => b.addEventListener("click", async () => {
+      try {
+        await json("POST", "/api/products/code", {
+          product_key: b.dataset.code, short_code: value(b.dataset.input),
+        });
+        await reload();
+      } catch (e) { window.alert(e.message); }
+    }));
+
+    target.querySelectorAll("[data-dn]").forEach((b) => b.addEventListener("click", async () => {
+      const also = Array.from(target.querySelectorAll(`input[name="${b.dataset.with}"]:checked`)).map((i) => i.value);
+      const dn = value(b.dataset.input);
+      const reason = value(b.dataset.why);
+      try {
+        if (also.length) {
+          await json("POST", `/api/rounds/${id}/delivery-notes/bulk`, {
+            delivery_ids: [b.dataset.dn, ...also], dn, provenance: "operator", reason,
+          });
+        } else {
+          await json("POST", `/api/rounds/${id}/delivery-notes?delivery_id=${encodeURIComponent(b.dataset.dn)}`, {
+            dn, provenance: "operator", reason,
+          });
+        }
+        await reload();
+      } catch (e) { window.alert(e.message); }
+    }));
+
+    target.querySelectorAll("[data-none]").forEach((b) => b.addEventListener("click", async () => {
+      try {
+        await json("POST", `/api/rounds/${id}/delivery-notes?delivery_id=${encodeURIComponent(b.dataset.none)}`, {
+          dn: null, provenance: "none_foreign_producer", reason: value(b.dataset.why),
+        });
+        await reload();
+      } catch (e) { window.alert(e.message); }
+    }));
+
+    target.querySelectorAll("[data-suspension]").forEach((b) => b.addEventListener("click", async () => {
+      try {
+        await json("POST", `/api/rounds/${id}/suspensions/${b.dataset.suspension}`, {
+          chosen_source: value(b.dataset.source), reason: value(b.dataset.why),
+        });
+        await reload();
+      } catch (e) { window.alert(e.message); }
+    }));
+
+    const finish = target.querySelector("[data-resolve]");
+    if (finish) finish.addEventListener("click", async () => {
+      try { await json("POST", `/api/rounds/${id}/resolve`); await refreshList(); await reload(); }
+      catch (e) { window.alert(e.message); }
+    });
+  }
+
+  // --- the whole round ------------------------------------------------------------------------------
+
+  function draw() {
+    const d = current;
+    const t = d.totals;
+
+    const alerts = d.alerts.length ? `
+      <h2>Counted once, and said out loud <span class="muted">(${d.alerts.length})</span></h2>
+      <p class="muted">These were read and deliberately not counted again. A skip nobody can see is
+        indistinguishable from a record that went missing.</p>
+      ${d.alerts.map((a) => `<div class="warning"><span class="mono">${esc(a.subject)}</span> — ${esc(a.message)}</div>`).join("")}` : "";
+
+    const suspensions = d.suspensions.length ? `
+      <h2>Two documents disagree <span class="muted">(${d.suspensions.filter((s) => !s.is_decided).length} open)</span></h2>
+      ${d.suspensions.map((s) => s.is_decided ? `
+        <div class="panel">
+          <strong class="mono">${esc(s.subject_key)}</strong> <span class="tag">settled</span>
+          <p class="muted" style="margin:.3rem 0 0">${esc(s.description)}</p>
+          <p style="margin:.3rem 0 0">Took <strong>${esc(s.chosen_source)}</strong> — ${esc(s.reason)}
+            <span class="muted">(${esc(s.decided_by || "?")})</span></p>
+        </div>` : `
+        <div class="panel">
+          <strong class="mono">${esc(s.subject_key)}</strong>
+          <p style="margin:.3rem 0 0">${esc(s.description)}</p>
+          <div class="warning" style="margin:.5rem 0">${esc(s.differences)}</div>
+          <label for="sus-${s.id}-src">Which document is right?</label>
+          <input id="sus-${s.id}-src" type="text" placeholder="the filename you are taking">
+          <label for="sus-${s.id}-why">Why (required)</label>
+          <input id="sus-${s.id}-why" type="text" placeholder="e.g. the full export, not the narrowed re-run">
+          <button data-suspension="${s.id}" data-source="sus-${s.id}-src" data-why="sus-${s.id}-why">Record the decision</button>
+        </div>`).join("")}` : "";
+
+    const notes = d.delivery_notes.length ? `
+      <h2>Delivery notes approved <span class="muted">(${d.delivery_notes.length})</span></h2>
+      <div class="panel"><table>
+        <thead><tr><th>Delivery</th><th>DN</th><th>How</th><th>Reason</th><th>By</th></tr></thead>
+        <tbody>${d.delivery_notes.map((n) => `<tr>
+          <td class="mono">${esc(n.delivery_id)}</td>
+          <td class="mono">${n.dn ? esc(n.dn) : '<span class="tag">none, recorded</span>'}</td>
+          <td>${esc(n.provenance.replace(/_/g, " "))}</td>
+          <td class="muted">${esc(n.operator_reason || n.reasoning)}</td>
+          <td class="muted">${esc(n.approved_by || "-")}</td></tr>`).join("")}</tbody>
+      </table></div>` : "";
+
+    const rows = `
+      <h2>Rows as they stand</h2>
+      <p class="muted">Opening stock runs down the consignment, not the row: the second account sale
+        opens where the first one closed, and what is left carries into the next round.</p>
+      <div class="panel"><table>
+        <thead><tr><th>DN</th><th>Date</th><th>STM No</th><th>Description</th>
+          <th class="num">Opening</th><th class="num">Sold</th><th class="num">Left</th>
+          <th class="num">Gross</th><th></th></tr></thead>
+        <tbody>${d.rows.map((r) => {
+          const s = r.stock || {};
+          return `<tr>
+            <td class="mono">${r.dn ? esc(r.dn) : '<span class="tag">waiting</span>'}</td>
+            <td>${esc(r.grouping_date || r.earliest_date || "-")}</td>
+            <td class="mono">${esc(r.account_sale_display)}</td>
+            <td>${r.short_code ? esc(r.short_code) : `<span class="tag">no code</span> <span class="muted">${esc(r.product)}</span>`}</td>
+            <td class="num">${esc(s.opening ?? "-")}${s.is_carried_forward ? ' <span class="tag">carried in</span>' : ""}</td>
+            <td class="num">${esc(s.sold ?? "-")}</td>
+            <td class="num">${esc(s.closing ?? "-")}</td>
+            <td class="num">${esc(r.value)}</td>
+            <td>${r.is_writable ? "" : `<span class="tag">${esc(r.blocked_by.join(", "))}</span>`}</td>
+          </tr>`;
+        }).join("")}</tbody>
+      </table></div>`;
+
+    target.innerHTML = `
+      <h2>Round #${d.summary.id} <span class="muted">(${esc(d.summary.status)})</span></h2>
+      <div class="${d.is_clear ? "notice" : "warning"}">
+        ${d.is_clear
+          ? `Nothing is outstanding. ${esc(t.rows)} row(s) are ready for the workbook.`
+          : esc(d.blocking_reason)}
+      </div>
+      <div class="panel"><table><tbody>
+        <tr><td>Deliveries / consignments / rows</td><td>${esc(t.deliveries)} / ${esc(t.consignments)} / <strong>${esc(t.rows)}</strong></td></tr>
+        <tr><td>Cartons sent</td><td>${esc(t.cartons_sent)} <span class="muted">— once per consignment</span></td></tr>
+        <tr><td>Cartons net</td><td>${esc(t.cartons_net)}</td></tr>
+        <tr><td>Gross</td><td>${esc(t.value)}</td></tr>
+        <tr><td>Still on the floor</td><td>${esc(t.closing_stock)} <span class="muted">— carried into the next round</span></td></tr>
+        <tr><td>The operator's book</td><td class="muted">${esc(d.book.detail)}</td></tr>
+      </tbody></table></div>
+
+      ${d.queue.length ? `<h2>Open questions <span class="muted">(${d.queue.length})</span></h2>
+        <p class="muted">Links first: agreeing that two names are one product can answer a code question below it.</p>
+        ${d.queue.map(card).join("")}` : ""}
+
+      ${suspensions}
+      ${alerts}
+      ${notes}
+      ${rows}
+      ${d.stock_notes.map((n) => `<div class="warning">${esc(n)}</div>`).join("")}
+
+      <div class="panel">
+        <button data-resolve ${d.is_clear && d.summary.status === "staged" ? "" : "disabled"}>
+          ${d.summary.status === "staged" ? "Close the queue" : "Queue closed"}
+        </button>
+        <p class="muted" style="font-size:.9em;margin:.5rem 0 0">
+          ${d.summary.status === "staged"
+            ? "Closing the queue marks this round ready for the workbook. It stays open until every question above is answered."
+            : "This round is resolved. Appending it to the workbook is Phase 4."}
+        </p>
+      </div>`;
+
+    target.hidden = false;
+    wire();
+  }
+
+  refreshList();
+})();
+</script>
+{% endblock %}

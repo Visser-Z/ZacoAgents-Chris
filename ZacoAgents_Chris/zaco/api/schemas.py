@@ -222,3 +222,150 @@ class StagedRoundOut(BaseModel):
     suggestions: list[SuggestionOut]
     unpaid_dockets: list[UnpaidDocketOut]
     problems: list[ProblemOut]
+
+
+# --- Resolution queue (Phase 3) ---------------------------------------------------------------
+
+
+class TestOut(BaseModel):
+    """One of the three tests a supplier reference has to pass to be proposed as a DN."""
+
+    name: str
+    passed: bool
+    detail: str
+
+
+class QueueItemOut(BaseModel):
+    """One open question, with the evidence it was raised on."""
+
+    kind: str
+    key: str
+    title: str
+    question: str
+    reasoning: str
+    evidence: dict[str, str] = Field(default_factory=dict)
+    proposal: str | None = None
+    provenance: str | None = None
+    tests: list[TestOut] = Field(default_factory=list)
+    counter_evidence: str | None = None
+    choices: list[str] = Field(default_factory=list)
+    companions: list[str] = Field(default_factory=list)
+    requires_reason: bool = False
+
+
+class SuspensionOut(BaseModel):
+    id: int
+    subject_kind: str
+    subject_key: str
+    description: str
+    differences: str
+    chosen_source: str | None = None
+    reason: str = ""
+    is_decided: bool = False
+    decided_by: str | None = None
+    decided_at: datetime | None = None
+
+
+class AlertOut(BaseModel):
+    """Something that was deliberately not counted, said out loud rather than logged (D12)."""
+
+    subject: str
+    message: str
+
+
+class DeliveryNoteOut(BaseModel):
+    delivery_id: str
+    dn: str | None
+    provenance: str
+    reasoning: str
+    operator_reason: str = ""
+    approved_by: str | None = None
+    approved_at: datetime | None = None
+
+
+class StockOut(BaseModel):
+    """Opening stock, what sold, and what is left. Absent stays absent (section 6)."""
+
+    opening: str | None
+    sold: str
+    closing: str | None
+    is_carried_forward: bool = False
+    note: str | None = None
+
+
+class ResolvedRowOut(RowOut):
+    """A prospective workbook row once the queue's answers are applied to it."""
+
+    dn: str | None = None
+    dn_provenance: str | None = None
+    grouping_date: date | None = None
+    stock: StockOut | None = None
+    is_writable: bool = False
+    blocked_by: list[str] = Field(default_factory=list)
+
+
+class RoundSummaryOut(BaseModel):
+    id: int
+    label: str
+    status: str
+    created_at: datetime
+    created_by: str | None = None
+    document_count: int
+    duplicate_count: int = 0
+    open_questions: int = 0
+
+
+class RoundOut(BaseModel):
+    """One saved round, everything it amounts to, and everything still unanswered."""
+
+    summary: RoundSummaryOut
+    totals: dict[str, str]
+    cartons: CartonsOut
+    is_clear: bool
+    blocking_reason: str | None = None
+    book: dict[str, str]
+    queue: list[QueueItemOut] = Field(default_factory=list)
+    suspensions: list[SuspensionOut] = Field(default_factory=list)
+    alerts: list[AlertOut] = Field(default_factory=list)
+    delivery_notes: list[DeliveryNoteOut] = Field(default_factory=list)
+    rows: list[ResolvedRowOut] = Field(default_factory=list)
+    deliveries: list[DeliveryOut] = Field(default_factory=list)
+    account_sales: list[AccountSaleOut] = Field(default_factory=list)
+    products: list[ProductOut] = Field(default_factory=list)
+    problems: list[ProblemOut] = Field(default_factory=list)
+    stock_notes: list[str] = Field(default_factory=list)
+
+
+class ApproveDnIn(BaseModel):
+    dn: str | None = None
+    """`None` records a deliberate "no delivery note", which needs a reason (D11)."""
+
+    provenance: str = "operator"
+    reason: str = ""
+
+
+class BulkDnIn(BaseModel):
+    """One delivery note across several deliveries -- the one-truck case."""
+
+    delivery_ids: list[str] = Field(min_length=1)
+    dn: str | None = None
+    provenance: str = "operator"
+    reason: str = ""
+
+
+class CaptureCodeIn(BaseModel):
+    product_key: str
+    short_code: str = Field(min_length=1, max_length=200)
+
+
+class LinkDecisionIn(BaseModel):
+    left: str
+    right: str
+    accepted: bool
+    reason: str = ""
+
+
+class DecideSuspensionIn(BaseModel):
+    chosen_source: str = Field(min_length=1)
+    reason: str = Field(min_length=1)
+    """Mandatory. A choice with no reason is unusable to whoever reads it next quarter (D12)."""

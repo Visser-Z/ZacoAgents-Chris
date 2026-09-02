@@ -277,6 +277,38 @@ class Row:
 
 
 @dataclass
+class Disagreement:
+    """Two documents describing one record differently (D12).
+
+    The *record* is held back, never the file. Refusing a whole export because one account sale
+    conflicts throws away every record in it that was fine, and the operator then has no way to
+    proceed except to trust the one they happen to upload second.
+    """
+
+    subject_kind: str
+    subject_key: str
+    description: str
+    differences: list[tuple[str, str, str]] = field(default_factory=list)
+    """(what differs, what the first document said, what the second said)."""
+
+    sources: tuple[str, str] = ("", "")
+
+
+@dataclass
+class SkippedDuplicate:
+    """A record seen twice with every figure identical, so it was counted once.
+
+    Recorded rather than logged. D12 is explicit that the skip must be *visible*: a silent skip
+    and a lost record look exactly alike from the outside, and only one of them is fine.
+    """
+
+    subject_kind: str
+    subject_key: str
+    description: str
+    source: str
+
+
+@dataclass
 class AccountSale:
     """A payment run the agent closed off. The workbook's STM No, column E."""
 
@@ -291,6 +323,12 @@ class AccountSale:
     has_commodity_breakdown: bool = True
     sales_value: Decimal | None = None
     """What the payment side says was sold under it, where it says."""
+
+    source_name: str | None = None
+    """Which document this was first read from, so a disagreement can name both sides."""
+
+    also_known_as: list[str] = field(default_factory=list)
+    """Other references the same payment run was written under, kept so nothing is lost."""
 
     @property
     def display_number(self) -> str:
@@ -320,6 +358,18 @@ class StagedRound:
     rows: list[Row] = field(default_factory=list)
     problems: list[Problem] = field(default_factory=list)
     sources: list[str] = field(default_factory=list)
+    disagreements: list[Disagreement] = field(default_factory=list)
+    skipped: list[SkippedDuplicate] = field(default_factory=list)
+    products_seen: list[str] = field(default_factory=list)
+    """Every product name this round's documents actually contained, as they wrote it.
+
+    Product identity is global -- a name learned in one round is still that product in the next
+    -- but the *questions* are not. This is what lets the queue ask only about the products in
+    front of it while still resolving codes learned anywhere.
+    """
+
+    proven_links: list[tuple[str, str, str]] = field(default_factory=list)
+    """(sales name, statement name, the evidence) for links an account sale proved."""
 
     @property
     def consignments(self) -> list[Consignment]:
@@ -351,3 +401,8 @@ class StagedRound:
     @property
     def unidentifiable_consignments(self) -> list[Consignment]:
         return [c for c in self.consignments if not c.is_identifiable]
+
+    @property
+    def docket_identities(self) -> set[tuple[str, str, str, str]]:
+        """Every sale this round counted, so a later round can tell it has seen one before."""
+        return {d.identity for c in self.consignments for d in c.dockets}

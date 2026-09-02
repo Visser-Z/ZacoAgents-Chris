@@ -24,6 +24,10 @@ COPY zaco ./zaco
 # The operator's product short codes. Without this the image runs with an empty lookup and
 # silently resolves nothing -- which looks like a working system with more work to do.
 COPY lookup ./lookup
+# The operator's starting workbook. The live book lives on a persistent volume, which is empty
+# the first time the stack comes up; this seeds it once, so a fresh clone has something to read
+# the delivery note series from instead of refusing to propose a number.
+COPY workbook/account-sales-book.xlsx ./seed/account-sales-book.xlsx
 COPY entrypoint.sh ./
 RUN chmod +x entrypoint.sh
 

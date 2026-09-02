@@ -7,6 +7,7 @@ that `Settings` reads (D3).
 from __future__ import annotations
 
 import logging
+import shutil
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -15,11 +16,24 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
-from zaco.api import routes_admin, routes_auth, routes_health, routes_ingest, routes_rounds
+from zaco.api import (
+    routes_admin,
+    routes_auth,
+    routes_health,
+    routes_ingest,
+    routes_queue,
+    routes_rounds,
+)
 from zaco.auth.service import seed_admin
 from zaco.config import get_settings
 from zaco.db.base import get_session_factory
+from zaco.resolve.service import WORKBOOK_NAME, workbook_path
 from zaco.web import routes as web_routes
+
+#: A copy of the starting workbook, shipped in the image. The live book lives on a persistent
+#: volume that is empty on a fresh stack, and without a book there is no delivery note series
+#: to mint from -- so the queue would ask for every number by hand on the very first round.
+SEED_WORKBOOK = Path(__file__).resolve().parent.parent / "seed" / WORKBOOK_NAME
 
 log = logging.getLogger("zaco")
 
@@ -33,6 +47,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         except OSError as exc:
             # Surfaced by /api/health rather than crashing: the operator should see a reason.
             log.warning("Could not create %s: %s", directory, exc)
+
+    _seed_workbook()
 
     session = get_session_factory()()
     try:
@@ -53,6 +69,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         log.warning("SECRET_KEY is the shipped default. Set a real one before hosting.")
 
     yield
+
+
+def _seed_workbook() -> None:
+    """Put a starting book on the volume, once, and never touch it again.
+
+    Only when there is nothing there. The workbook is the operator's live file and the thing the
+    business settles money against; overwriting one that already exists would be the single worst
+    thing this system could do on a restart.
+    """
+    target = workbook_path()
+    if target.exists() or not SEED_WORKBOOK.exists():
+        return
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy(SEED_WORKBOOK, target)
+        log.warning("Seeded %s from the shipped starting workbook.", target)
+    except OSError as exc:
+        log.warning("Could not seed the workbook at %s: %s", target, exc)
 
 
 def create_app() -> FastAPI:
@@ -80,7 +114,11 @@ def create_app() -> FastAPI:
     app.include_router(routes_auth.router)
     app.include_router(routes_admin.router)
     app.include_router(routes_ingest.router)
+    # routes_rounds first: its literal `/api/rounds/stage` must be matched before the
+    # `/api/rounds/{round_id}` pattern that routes_queue registers on the same prefix.
     app.include_router(routes_rounds.router)
+    app.include_router(routes_queue.router)
+    app.include_router(routes_queue.products)
     app.include_router(web_routes.router)
 
     static_dir = Path(__file__).parent / "web" / "static"
