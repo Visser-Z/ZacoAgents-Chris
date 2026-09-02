@@ -1,0 +1,18 @@
+# Default: let git normalise text in the repository.
+* text=auto
+
+# These run inside a Linux container. CRLF would make `#!/bin/sh\r` not an interpreter, and it
+# is easy to reintroduce by editing on Windows, so pin them.
+*.sh            text eol=lf
+Dockerfile      text eol=lf
+entrypoint.sh   text eol=lf
+docker-compose.yml text eol=lf
+render.yaml     text eol=lf
+*.yml           text eol=lf
+*.yaml          text eol=lf
+
+# The exports in data/ are fixtures. Their exact bytes -- CRLF, a BOM, U+00A0 separators --
+# are the thing under test, so git must not touch them.
+data/**         -text
+workbook/*.xlsx binary
+*.xlsx          binary

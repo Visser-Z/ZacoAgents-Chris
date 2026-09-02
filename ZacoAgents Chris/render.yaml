@@ -1,0 +1,44 @@
+# The hosted target. Written in Phase 0 but deliberately not exercised until the local stack
+# works end to end, so hosting can never be blamed for a bug that is really in the app (D3).
+#
+# Note what is NOT here: a backup sidecar. A Render disk mounts to exactly one service, so no
+# second container can share the volume. The snapshot is taken inside the append transaction
+# instead, which is the stronger guarantee anyway (D4).
+
+services:
+  - type: web
+    name: zaco
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    healthCheckPath: /api/health
+    disk:
+      name: zaco-data
+      mountPath: /data
+      sizeGB: 1
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: zaco-db
+          property: connectionString
+      - key: WORKBOOK_DIR
+        value: /data/workbook
+      - key: BACKUP_DIR
+        value: /data/backups
+      - key: BACKUP_RETENTION
+        value: "50"
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: ALLOWED_EMAIL_DOMAINS
+        sync: false
+
+databases:
+  - name: zaco-db
+    databaseName: zaco
+    user: zaco
+    plan: basic-256mb

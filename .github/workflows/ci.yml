@@ -1,0 +1,60 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: zaco
+          POSTGRES_PASSWORD: zaco
+          POSTGRES_DB: zaco_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U zaco"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    defaults:
+      run:
+        working-directory: "ZacoAgents Chris"
+
+    env:
+      # Tests that need a database are marked `db` and skip when this is unset, so the suite
+      # still runs on a machine without Postgres.
+      DATABASE_URL: postgresql+psycopg://zaco:zaco@localhost:5432/zaco_test
+      SECRET_KEY: ci-only-not-a-secret
+      WORKBOOK_DIR: /tmp/zaco/workbook
+      BACKUP_DIR: /tmp/zaco/backups
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install
+        run: pip install -e ".[dev]"
+
+      # Same config file the editor reads, so CI cannot disagree with what you saw locally.
+      - name: Lint
+        run: ruff check . && ruff format --check .
+
+      - name: Types
+        run: mypy zaco
+
+      - name: Migrations apply cleanly from empty
+        run: alembic upgrade head
+
+      - name: Tests
+        run: pytest -q

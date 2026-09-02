@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Zaco{% endblock %}</title>
+  <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/app.js" defer></script>
+</head>
+<body>
+{% if user %}
+<header class="topbar">
+  <span class="brand"><a href="/" style="text-decoration:none;color:inherit">Zaco account sales</a></span>
+  <span class="spacer"></span>
+  <span class="who">{{ user.display_name or user.email }}</span>
+  {% if user.can(Perm.ADMIN) %}<a href="/admin">Accounts</a>{% endif %}
+  <button class="link" data-action="POST /api/auth/logout" data-then="/login">Sign out</button>
+</header>
+<nav class="main">
+  {% for path, label, permission, phase in nav %}
+    {% if user.can(permission) %}
+      <span class="pending" title="Not built yet">{{ label }}<span class="phase">{{ phase }}</span></span>
+    {% endif %}
+  {% endfor %}
+</nav>
+{% endif %}
+
+<main class="{% block main_class %}{% endblock %}">
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>

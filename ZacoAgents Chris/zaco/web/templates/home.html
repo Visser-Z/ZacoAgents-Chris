@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Zaco account sales{% endblock %}
+
+{% block content %}
+<h1>Zaco account sales</h1>
+<p class="lede">
+  Reads a round of market agent reports, resolves the facts those reports do not carry, and
+  appends the result to the operator's live workbook.
+</p>
+
+<div class="notice">
+  <strong>Phase 0 is in place:</strong> accounts, permissions and the durable record.
+  Everything in the navigation above is marked with the phase that will build it. Nothing
+  reports a figure yet, which is why nothing above shows one.
+</div>
+
+<h2>What your account may do</h2>
+<div class="panel">
+  {% if user.granted %}
+    <table>
+      <tbody>
+      {% for permission in all_permissions %}
+        {% if user.can(permission) %}
+        <tr>
+          <td class="mono">{{ permission.value }}</td>
+          <td>{{ permission_descriptions[permission] }}</td>
+        </tr>
+        {% endif %}
+      {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p class="muted">
+      Your account has no permissions yet. An administrator grants them individually.
+    </p>
+  {% endif %}
+</div>
+
+<h2>Where the decisions are written down</h2>
+<div class="panel">
+  <p>
+    Every call this system makes where the reports left a choice open is recorded in
+    <code>DECISIONS.md</code>, together with what was rejected and why, and five questions that
+    are still open. Those open questions are surfaced in the interface as they come up rather
+    than being guessed at.
+  </p>
+</div>
+{% endblock %}

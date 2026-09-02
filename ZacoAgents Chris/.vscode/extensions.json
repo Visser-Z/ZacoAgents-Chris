@@ -1,0 +1,25 @@
+{
+  "// why": "Committed so the setup travels with the project rather than living in one machine's settings.",
+  "recommendations": [
+    "ms-python.python",
+    "ms-python.vscode-pylance",
+    "ms-python.debugpy",
+    "charliermarsh.ruff",
+    "ms-python.mypy-type-checker",
+    "ms-azuretools.vscode-containers",
+    "ms-vscode-remote.remote-containers",
+    "ms-ossdata.vscode-pgsql",
+    "rangav.vscode-thunder-client",
+    "mechatroner.rainbow-csv",
+    "grapecity.gc-excelviewer",
+    "tamasfe.even-better-toml",
+    "redhat.vscode-yaml",
+    "eamodio.gitlens"
+  ],
+  "unwantedRecommendations": [
+    "ms-python.autopep8",
+    "ms-python.black-formatter",
+    "ms-python.flake8",
+    "ms-python.isort"
+  ]
+}

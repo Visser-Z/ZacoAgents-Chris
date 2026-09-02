@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Not permitted — Zaco{% endblock %}
+
+{% block content %}
+<h1>Not permitted</h1>
+<div class="warning">
+  Your account does not have the <code>{{ needed.value }}</code> permission, so this page is not
+  available to you. An administrator can grant it.
+</div>
+<p><a href="/">Back</a></p>
+{% endblock %}

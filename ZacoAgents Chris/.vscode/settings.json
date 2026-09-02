@@ -1,0 +1,38 @@
+{
+  "// why": "Lint, type and test settings all defer to pyproject.toml so the editor and CI cannot disagree.",
+
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv/Scripts/python.exe",
+  "python.terminal.activateEnvironment": true,
+
+  "python.testing.pytestEnabled": true,
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestArgs": ["tests"],
+
+  "mypy-type-checker.importStrategy": "fromEnvironment",
+  "mypy-type-checker.reportingScope": "workspace",
+
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+      "source.fixAll.ruff": "explicit",
+      "source.organizeImports.ruff": "explicit"
+    }
+  },
+
+  "[html]": { "editor.formatOnSave": false },
+  "[yaml]": { "editor.defaultFormatter": "redhat.vscode-yaml" },
+
+  "files.exclude": {
+    "**/__pycache__": true,
+    "**/.pytest_cache": true,
+    "**/.mypy_cache": true,
+    "**/.ruff_cache": true
+  },
+  "files.insertFinalNewline": true,
+  "files.trimTrailingWhitespace": true,
+
+  "// data files": "The exports in data/ are fixtures. Never reformat them -- their malformedness is the test.",
+  "[csv]": { "editor.formatOnSave": false, "files.trimTrailingWhitespace": false },
+  "[plaintext]": { "editor.formatOnSave": false, "files.trimTrailingWhitespace": false }
+}

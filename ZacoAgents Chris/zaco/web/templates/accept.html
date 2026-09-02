@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Set up your account — Zaco{% endblock %}
+{% block main_class %}narrow{% endblock %}
+
+{% block content %}
+<h1>Set up your account</h1>
+<p class="lede">
+  This invitation belongs to one email address. Your own account is what stamps every queue
+  answer, DN approval and append you make, so it is not shared.
+</p>
+
+<div class="panel">
+  <form data-api="POST /api/auth/accept" data-then="/">
+    <div class="error" data-error hidden></div>
+    <input type="hidden" name="token" value="{{ token }}">
+    <label for="display_name">Your name</label>
+    <input id="display_name" name="display_name" type="text" autocomplete="name">
+    <label for="password">Choose a password (at least 12 characters)</label>
+    <input id="password" name="password" type="password" autocomplete="new-password" required minlength="12" autofocus>
+    <button type="submit">Create account</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,71 @@
+# The local target, and the one that must work first (D3). Same image that gets hosted.
+#
+#   docker compose up --build   ->   http://localhost:8000
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: zaco
+      POSTGRES_PASSWORD: zaco
+      POSTGRES_DB: zaco
+    volumes:
+      - zaco_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zaco -d zaco"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+    # Exposed so the PostgreSQL extension in VS Code can inspect the durable record while
+    # building section 8. Loopback only.
+    ports:
+      - "127.0.0.1:5432:5432"
+
+  app:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://zaco:zaco@db:5432/zaco
+      WORKBOOK_DIR: /data/workbook
+      BACKUP_DIR: /data/backups
+      BACKUP_RETENTION: "50"
+      SECRET_KEY: ${SECRET_KEY:-dev-only-not-a-secret}
+      ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-change-me-please}
+      ALLOWED_EMAIL_DOMAINS: ${ALLOWED_EMAIL_DOMAINS:-}
+    volumes:
+      - zaco_workbook:/data/workbook
+      - zaco_backups:/data/backups
+    ports:
+      - "8000:8000"
+
+  # Parity only. The snapshot that actually guarantees anything is taken inside the append
+  # transaction by the app itself (D4) -- a container watching the volume can copy a file
+  # mid-write, and on a hosting provider a disk cannot be shared with a second service at all.
+  # This exists so the local stack matches the compose design that was asked for, and as a
+  # coarse safety net on a VPS deployment.
+  backup-sidecar:
+    image: alpine:3.20
+    depends_on:
+      - app
+    volumes:
+      - zaco_workbook:/data/workbook:ro
+      - zaco_backups:/data/backups
+    command: >
+      sh -c 'while true; do
+        for f in /data/workbook/*.xlsx; do
+          [ -e "$$f" ] || continue;
+          stamp=$$(date -u +%Y%m%dT%H%M%SZ);
+          target=/data/backups/sidecar-$$stamp-$$(basename "$$f");
+          cp "$$f" "$$target" 2>/dev/null || true;
+        done;
+        ls -1t /data/backups/sidecar-* 2>/dev/null | tail -n +51 | xargs -r rm -f;
+        sleep 900;
+      done'
+
+volumes:
+  zaco_pgdata:
+  zaco_workbook:
+  zaco_backups:

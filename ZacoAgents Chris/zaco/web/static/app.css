@@ -1,0 +1,134 @@
+/* Plain on purpose. Section 12: a plain interface showing the right figures beats a handsome
+   one showing the wrong ones. What styling exists is in service of reading numbers correctly --
+   tabular figures, right-aligned money, and flags that are visible without being everywhere. */
+
+:root {
+  --ink: #1b1d1e;
+  --muted: #5d6467;
+  --line: #d8dcde;
+  --bg: #f7f8f8;
+  --panel: #ffffff;
+  --accent: #17564a;
+  --warn-bg: #fdf3e3;
+  --warn-line: #e0b56a;
+  --warn-ink: #7a4d05;
+  --bad-bg: #fdecec;
+  --bad-line: #dda3a3;
+  --bad-ink: #8b2020;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 15px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+a { color: var(--accent); }
+
+header.topbar {
+  display: flex;
+  align-items: baseline;
+  gap: 1.5rem;
+  padding: 0.85rem 1.5rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+header.topbar .brand { font-weight: 600; letter-spacing: 0.01em; }
+header.topbar .spacer { flex: 1; }
+header.topbar .who { color: var(--muted); font-size: 0.9em; }
+
+nav.main {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.1rem;
+  padding: 0.6rem 1.5rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  font-size: 0.93em;
+}
+nav.main .pending { color: var(--muted); cursor: default; }
+nav.main .pending .phase {
+  font-size: 0.82em;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 0.45em;
+  margin-left: 0.3em;
+}
+
+main { max-width: 62rem; margin: 0 auto; padding: 1.75rem 1.5rem 4rem; }
+main.narrow { max-width: 26rem; }
+
+h1 { font-size: 1.45rem; margin: 0 0 0.35rem; }
+h2 { font-size: 1.1rem; margin: 2rem 0 0.6rem; }
+p.lede { color: var(--muted); margin: 0 0 1.5rem; }
+
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 1.1rem 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+label { display: block; margin: 0.75rem 0 0.2rem; font-size: 0.9em; color: var(--muted); }
+input[type="text"], input[type="email"], input[type="password"] {
+  width: 100%;
+  padding: 0.5rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font: inherit;
+  background: #fff;
+}
+fieldset { border: 1px solid var(--line); border-radius: 4px; margin: 1rem 0 0; padding: 0.6rem 0.9rem 0.9rem; }
+legend { font-size: 0.85em; color: var(--muted); padding: 0 0.35em; }
+fieldset label { display: flex; gap: 0.5rem; align-items: baseline; color: var(--ink); margin: 0.4rem 0 0; }
+fieldset label .hint { color: var(--muted); font-size: 0.88em; }
+
+button {
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  cursor: pointer;
+}
+button:disabled { opacity: 0.55; cursor: progress; }
+button.secondary { background: #fff; color: var(--accent); }
+button.link { background: none; border: none; color: var(--accent); padding: 0; margin: 0; text-decoration: underline; }
+
+table { width: 100%; border-collapse: collapse; font-size: 0.94em; }
+th, td { text-align: left; padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 0.86em; text-transform: uppercase; letter-spacing: 0.03em; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+tr.inactive td { color: var(--muted); }
+
+.tag {
+  display: inline-block;
+  font-size: 0.8em;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  padding: 0.05em 0.4em;
+  margin: 0 0.2em 0.2em 0;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.notice, .warning, .error {
+  border-radius: 4px;
+  padding: 0.6rem 0.85rem;
+  margin: 0 0 1rem;
+  font-size: 0.93em;
+}
+.notice { background: #eef4f3; border: 1px solid #c2d8d3; }
+.warning { background: var(--warn-bg); border: 1px solid var(--warn-line); color: var(--warn-ink); }
+.error { background: var(--bad-bg); border: 1px solid var(--bad-line); color: var(--bad-ink); }
+[hidden] { display: none !important; }
+
+code, .mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 0.92em; }
+.muted { color: var(--muted); }
