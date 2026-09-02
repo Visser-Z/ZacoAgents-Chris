@@ -25,7 +25,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: "ZacoAgents Chris"
+        working-directory: ZacoAgents_Chris
 
     env:
       # Tests that need a database are marked `db` and skip when this is unset, so the suite

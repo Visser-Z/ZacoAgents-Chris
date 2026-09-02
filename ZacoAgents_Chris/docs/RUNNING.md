@@ -1,14 +1,15 @@
 # Running it
 
-`README.md` is the exercise brief as given and is left untouched. This is how to run what was
-built. Design decisions are in `DECISIONS.md`; what was found in the data is in `NOTES.md`.
+[README.md](../README.md) is the exercise brief as given and is left untouched apart from a
+pointer to these documents. This is how to run what was built. Design decisions are in
+[DECISIONS.md](DECISIONS.md); what was found in the data is in [NOTES.md](../NOTES.md).
 
 ## Locally, in one command
 
-Local is the primary target and must work before hosting does (`DECISIONS.md` D3).
+Local is the primary target and must work before hosting does ([DECISIONS.md](DECISIONS.md) D3).
 
 ```
-cd "ZacoAgents Chris"
+cd ZacoAgents_Chris
 docker compose up --build
 ```
 
@@ -32,12 +33,12 @@ They survive `docker compose down`; `docker compose down -v` destroys them.
 It is parity, not the guarantee. The snapshot that actually protects the workbook is taken
 **inside the append transaction** by the application: snapshot, append, commit, or roll all of
 it back. A container watching a volume can copy a file mid-write, and on a hosting provider a
-disk mounts to exactly one service, so a sidecar cannot share it at all. See `DECISIONS.md` D4.
+disk mounts to exactly one service, so a sidecar cannot share it at all. See [DECISIONS.md](DECISIONS.md) D4.
 
 ## Without Docker
 
 ```
-cd "ZacoAgents Chris"
+cd ZacoAgents_Chris
 python -m venv .venv && .venv\Scripts\activate      # PowerShell: .venv\Scripts\Activate.ps1
 pip install -e ".[dev]"
 copy .env.example .env                              # then edit it
@@ -86,7 +87,7 @@ permissions individually — `ingest`, `resolve`, `append`, `record_terms`, `vie
 
 That is not ceremony: every queue answer, DN approval, duplicate decision and append is stamped
 with a person, and a duplicate-conflict record reading "chose this export because…" is worth
-nothing if a shared account made the choice. See `DECISIONS.md` D14.
+nothing if a shared account made the choice. See [DECISIONS.md](DECISIONS.md) D14.
 
 No mail is sent. Copy the invitation link from the Accounts page and pass it on.
 

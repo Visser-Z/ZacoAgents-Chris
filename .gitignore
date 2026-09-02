@@ -11,7 +11,7 @@ venv/
 htmlcov/
 
 # Local runtime state: the workbook volume and its snapshots live outside the repo.
-# The DELIVERABLE workbook at ZacoAgents Chris/workbook/account-sales-book.xlsx is committed.
+# The DELIVERABLE workbook at ZacoAgents_Chris/workbook/account-sales-book.xlsx is committed.
 .local/
 *.xlsx.bak
 ~$*.xlsx

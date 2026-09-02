@@ -1,5 +1,14 @@
 # ZacoAgents build exercise
 
+> **What was built lives here.** This page is the brief as handed over; the only change to it
+> is this block.
+>
+> | | |
+> |---|---|
+> | [docs/RUNNING.md](docs/RUNNING.md) | How to run it, locally and hosted |
+> | [docs/DECISIONS.md](docs/DECISIONS.md) | Every call made where the reports left a choice, what was rejected and why, and what is still open |
+> | [NOTES.md](NOTES.md) | The short written note the brief asks for |
+
 Build the system described in `REQUIREMENTS.md` against the documents in
 `data/` and the workbook in `workbook/`.
 
