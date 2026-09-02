@@ -21,6 +21,9 @@ RUN pip install --upgrade pip \
 COPY alembic.ini ./
 COPY migrations ./migrations
 COPY zaco ./zaco
+# The operator's product short codes. Without this the image runs with an empty lookup and
+# silently resolves nothing -- which looks like a working system with more work to do.
+COPY lookup ./lookup
 COPY entrypoint.sh ./
 RUN chmod +x entrypoint.sh
 

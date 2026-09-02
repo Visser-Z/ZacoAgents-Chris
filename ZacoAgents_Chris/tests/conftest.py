@@ -26,9 +26,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 def _configure_environment(tmp_root: Path) -> None:
     # A database of its own. These tests TRUNCATE between cases, and pointing them at the
     # development database would mean running the suite destroyed a staged round.
-    os.environ.setdefault(
-        "DATABASE_URL", "postgresql+psycopg://zaco:zaco@127.0.0.1:5432/zaco_test"
-    )
+    os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://zaco:zaco@127.0.0.1:5432/zaco_test")
     os.environ["SECRET_KEY"] = "tests-only-not-a-secret"
     os.environ["ADMIN_EMAIL"] = ADMIN_EMAIL
     os.environ["ADMIN_PASSWORD"] = ADMIN_PASSWORD

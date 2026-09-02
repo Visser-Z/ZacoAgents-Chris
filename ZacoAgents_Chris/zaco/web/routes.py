@@ -33,6 +33,7 @@ router = APIRouter(include_in_schema=False)
 # disabled with the phase that will build it, so the shell is honest about what exists.
 NAV = [
     ("/rounds", "Read a document", Permission.INGEST, None),
+    ("/staged", "Stage a round", Permission.INGEST, None),
     ("/queue", "Resolution queue", Permission.RESOLVE, "Phase 3"),
     ("/workbook", "Workbook", Permission.APPEND, "Phase 4"),
     ("/reconciliation", "Reconciliation", Permission.VIEW_REPORTS, "Phase 5"),
@@ -98,3 +99,14 @@ def rounds_page(
     if not user.can(Permission.INGEST):
         return _page(request, "forbidden.html", user, needed=Permission.INGEST)
     return _page(request, "upload.html", user, kinds={k.value: v for k, v in TITLES.items()})
+
+
+@router.get("/staged", response_model=None)
+def staged_page(
+    request: Request, user: User | None = Depends(current_user_optional)
+) -> HTMLResponse | RedirectResponse:
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    if not user.can(Permission.INGEST):
+        return _page(request, "forbidden.html", user, needed=Permission.INGEST)
+    return _page(request, "staged.html", user)

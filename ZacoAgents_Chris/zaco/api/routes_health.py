@@ -42,6 +42,16 @@ def health(db: Session = Depends(get_db)) -> HealthOut:
     if settings.is_insecure_secret:
         warnings.append("SECRET_KEY is the shipped default. Set a real one before hosting.")
 
+    # A missing lookup does not crash anything; it just means every product arrives
+    # unresolved, which reads as 'more work to do' rather than 'the file is not there'.
+    from zaco.domain.build import LOOKUP_PATH
+
+    if not LOOKUP_PATH.exists():
+        warnings.append(
+            f"Product short-code lookup is missing at {LOOKUP_PATH}. Every product will "
+            "arrive unresolved."
+        )
+
     return HealthOut(
         status="ok" if database == "up" and writable and not warnings else "degraded",
         database=database,

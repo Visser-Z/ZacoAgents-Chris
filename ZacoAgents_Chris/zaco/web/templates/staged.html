@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %}Stage a round — Zaco{% endblock %}
+
+{% block content %}
+<h1>Stage a round</h1>
+<p class="lede">
+  Upload the documents for one round together. This shows what they amount to: the deliveries,
+  the consignments on the floor, and the rows those would become. Nothing is written anywhere.
+</p>
+
+<div class="panel">
+  <form id="stage-form">
+    <div class="error" data-error hidden></div>
+    <label for="files">The documents</label>
+    <input id="files" name="files" type="file" multiple required>
+    <p class="muted" style="font-size:0.88em;margin:0.4rem 0 0">
+      Any of the five kinds, in any order. If one of them cannot be identified, the whole round
+      is refused — staging the rest would show a picture that looks complete and is not.
+    </p>
+    <button type="submit">Stage it</button>
+  </form>
+</div>
+
+<div id="result" hidden></div>
+
+<script>
+(function () {
+  const form = document.getElementById("stage-form");
+  const errorBox = form.querySelector("[data-error]");
+  const target = document.getElementById("result");
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  form.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    errorBox.hidden = true; target.hidden = true;
+    const button = form.querySelector("button[type=submit]");
+    button.disabled = true;
+    try {
+      const body = new FormData();
+      for (const file of document.getElementById("files").files) body.append("files", file);
+      const response = await fetch("/api/rounds/stage", { method: "POST", body, credentials: "same-origin" });
+      const payload = await response.json();
+      if (!response.ok) {
+        const d = payload.detail;
+        target.innerHTML = `<h2>Refused</h2><div class="error">${esc(typeof d === "string" ? d : d.detail)}</div>`;
+      } else {
+        render(payload);
+      }
+      target.hidden = false;
+    } catch (error) {
+      errorBox.textContent = error.message; errorBox.hidden = false;
+    } finally { button.disabled = false; }
+  });
+
+  const cartons = (c) => {
+    const returned = c.returns_reportable
+      ? `${esc(c.returned)} back`
+      : `<span class="muted" title="No source could report returns for this">returns not reported</span>`;
+    return `${esc(c.sold)} sold, ${returned}, <strong>${esc(c.net)} net</strong>`;
+  };
+
+  function render(d) {
+    const t = d.totals;
+
+    const bySeverity = { error: [], warning: [], note: [] };
+    d.problems.forEach((p) => (bySeverity[p.severity] || bySeverity.note).push(p));
+    const problems = (severity, title, cls) => {
+      const items = bySeverity[severity];
+      if (!items.length) return "";
+      return `<h2>${title} <span class="muted">(${items.length})</span></h2>` +
+        items.map((p) => `<div class="${cls}">${esc(p.message)}</div>`).join("");
+    };
+
+    const deliveries = d.deliveries.map((del) => {
+      const consignments = del.consignments.map((c) => `
+        <tr>
+          <td class="mono">${esc(c.consignment_id || "(no consignment ID)")}
+            ${c.is_identifiable ? "" : '<span class="tag">cannot be tracked</span>'}</td>
+          <td>${esc(c.product)}
+            ${c.short_code ? `<span class="tag">${esc(c.short_code)}</span>`
+                           : '<span class="tag">no short code yet</span>'}</td>
+          <td class="num">${esc(c.qty_sent ?? "-")}</td>
+          <td>${cartons(c.cartons)}</td>
+          <td class="num">${esc(c.value)}</td>
+          <td>${c.account_sales.length
+                ? c.account_sales.map((a) => `<span class="tag">${esc(a)}</span>`).join("")
+                : '<span class="muted">none yet</span>'}</td>
+          <td class="num">${c.days_on_market === null ? "-" : esc(c.days_on_market) + "d"}</td>
+        </tr>`).join("");
+
+      return `
+      <div class="panel">
+        <div style="display:flex;gap:1.2rem;flex-wrap:wrap;align-items:baseline">
+          <strong class="mono">${esc(del.delivery_id || "(unidentified delivery)")}</strong>
+          <span class="muted">DN</span> ${del.dn ? esc(del.dn) : '<span class="tag">not captured yet</span>'}
+          <span class="muted">Supplier Ref</span> <span class="mono">${esc(del.supplier_ref || "-")}</span>
+          <span class="muted">Market</span> ${del.market ? esc(del.market) : '<span class="tag">not stated</span>'}
+          <span class="muted">Agent</span> ${esc(del.agent || "-")}
+        </div>
+        <table style="margin-top:.6rem">
+          <thead><tr>
+            <th>Consignment</th><th>Product</th>
+            <th class="num" title="Belongs to the delivery. Counted once per consignment, never once per row.">Qty sent ▾</th>
+            <th>Cartons</th><th class="num">Value</th><th>Account sales</th>
+            <th class="num" title="Belongs to the delivery, not the account sale">On market</th>
+          </tr></thead>
+          <tbody>${consignments}</tbody>
+        </table>
+      </div>`;
+    }).join("");
+
+    const rows = d.rows.map((r) => `
+      <tr>
+        <td class="mono">${esc(r.delivery_id || "-")}</td>
+        <td class="mono">${esc(r.account_sale_display)}</td>
+        <td>${esc(r.product)}${r.short_code ? "" : ' <span class="tag">no short code</span>'}</td>
+        <td>${cartons(r.cartons)}</td>
+        <td class="num">${esc(r.value)}</td>
+        <td class="num">${esc(r.price ?? "-")}</td>
+        <td>${esc(r.earliest_date || "-")}</td>
+      </tr>`).join("");
+
+    const accountSales = d.account_sales.map((a) => `
+      <tr>
+        <td class="mono">${esc(a.display_number)}</td>
+        <td>${esc(a.agent || "-")}</td>
+        <td>${esc(a.date_paid || "-")}</td>
+        <td class="num">${esc(a.gross ?? "-")}</td>
+        <td class="num">${esc(a.nett ?? "-")}</td>
+        <td class="num">${esc(a.deduction_share ?? "-")}</td>
+        <td class="num">${a.row_count}</td>
+        <td>${a.has_commodity_breakdown ? "" : '<span class="tag">no breakdown — can never reconcile</span>'}
+            ${a.row_count === 0 && a.has_commodity_breakdown ? '<span class="tag">paid, no sales behind it</span>' : ""}</td>
+      </tr>`).join("");
+
+    const products = d.products.map((p) => `
+      <tr>
+        <td>${esc(p.display_name)}</td>
+        <td>${p.short_code ? esc(p.short_code) : '<span class="tag">must be captured</span>'}</td>
+        <td>${p.names.length > 1 ? p.names.map((n) => `<div class="mono" style="font-size:.9em">${esc(n)}</div>`).join("") : ""}
+            ${p.merge_reasons.map((m) => `<div class="muted" style="font-size:.88em">merged: ${esc(m)}</div>`).join("")}</td>
+      </tr>`).join("");
+
+    const suggestions = d.suggestions.length ? `
+      <h2>Possible product links <span class="muted">(${d.suggestions.length})</span></h2>
+      <p class="muted">Not applied. Merging on resemblance would put one product's takings under another's name in every ranking.</p>
+      ${d.suggestions.map((s) => `<div class="warning">${esc(s.reason)}</div>`).join("")}` : "";
+
+    const unpaid = d.unpaid_dockets.length ? `
+      <h2>Sold, not yet in any payment run <span class="muted">(${d.unpaid_dockets.length})</span></h2>
+      <p class="muted">A row is delivery × product × account sale. These have no account sale, so no row can be written for them yet.</p>
+      <div class="panel"><table>
+        <thead><tr><th>Consignment</th><th>Docket</th><th>Sold</th><th class="num">Qty</th><th class="num">Value</th></tr></thead>
+        <tbody>${d.unpaid_dockets.map((u) => `<tr>
+          <td class="mono">${esc(u.consignment_id || "-")}</td><td class="mono">${esc(u.docket_number)}</td>
+          <td>${esc(u.date_sold || "-")}</td><td class="num">${esc(u.quantity ?? "-")}</td>
+          <td class="num">${esc(u.value ?? "-")}</td></tr>`).join("")}</tbody>
+      </table></div>` : "";
+
+    target.innerHTML = `
+      <h2>The round</h2>
+      <div class="notice">
+        <strong>${esc(d.sources.length)} document(s)</strong> →
+        ${esc(t.deliveries)} deliveries, ${esc(t.consignments)} consignments,
+        <strong>${esc(t.rows)} rows</strong>, ${esc(t.account_sales)} account sales.
+      </div>
+      <div class="panel">
+        <table><tbody>
+          <tr><td>Cartons</td><td>${cartons(d.cartons)}</td></tr>
+          <tr><td>Cartons sent</td><td>${esc(t.cartons_sent)}
+            <span class="muted">— counted once per consignment, not once per row</span></td></tr>
+          <tr><td>Gross value</td><td>${esc(t.value)}
+            <span class="muted">— cartons sold × unit price; the Nett arrives from the payment side</span></td></tr>
+          <tr><td>Products without a short code</td><td>${esc(t.products_unresolved)}
+            <span class="muted">— a row cannot be written until each is captured</span></td></tr>
+        </tbody></table>
+      </div>
+
+      ${problems("error", "Errors", "error")}
+      ${problems("warning", "Warnings", "warning")}
+
+      <h2>Rows <span class="muted">(delivery × product × account sale)</span></h2>
+      <div class="panel"><table>
+        <thead><tr><th>Delivery</th><th>STM No</th><th>Product</th><th>Cartons</th>
+          <th class="num">Gross</th><th class="num">Price/crt</th><th>Earliest date</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>
+
+      <h2>Deliveries and what is on the floor</h2>
+      ${deliveries}
+
+      <h2>Account sales</h2>
+      <div class="panel"><table>
+        <thead><tr><th>STM No</th><th>Agent</th><th>Paid</th><th class="num">Gross</th>
+          <th class="num">Nett</th><th class="num">Agent kept</th><th class="num">Rows</th><th></th></tr></thead>
+        <tbody>${accountSales}</tbody>
+      </table></div>
+
+      ${unpaid}
+      ${suggestions}
+
+      <h2>Products</h2>
+      <div class="panel"><table>
+        <thead><tr><th>Product</th><th>Operator short code</th><th>Also known as</th></tr></thead>
+        <tbody>${products}</tbody>
+      </table></div>
+
+      ${problems("note", "Notes", "notice")}
+
+      <p class="muted" style="font-size:.9em">
+        Nothing has been stored. Capturing the delivery note numbers and the missing short codes
+        comes next, and no row can be written until they are answered.
+      </p>`;
+  }
+})();
+</script>
+{% endblock %}
