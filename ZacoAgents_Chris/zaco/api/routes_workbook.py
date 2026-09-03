@@ -30,12 +30,17 @@ from zaco.db.models import Round, RoundAction, RoundStatus, User, utcnow
 from zaco.resolve import service
 from zaco.workbook import append as appender
 from zaco.workbook import snapshot
-from zaco.workbook.locate import WorkbookShapeError, locate, read_rows
+from zaco.workbook.locate import SheetLayout, WorkbookShapeError, locate, read_rows
 
 router = APIRouter(prefix="/api/workbook", tags=["workbook"])
 rounds = APIRouter(prefix="/api/rounds", tags=["workbook"])
 
 may_append = requires(Permission.APPEND)
+
+
+def _order(layout: SheetLayout) -> list[str]:
+    """Field names left to right, the way the book itself reads."""
+    return sorted(layout.columns, key=lambda name: layout.columns[name])
 
 
 def _ready(db: Session) -> list[ReadyRoundOut]:
@@ -111,7 +116,9 @@ def state(db: Session = Depends(get_db), _: User = Depends(current_user)) -> Wor
         sheet_name=layout.sheet_name,
         header_row=layout.header_row,
         row_count=len(read_rows(path, layout)),
-        letters={name: layout.letter(name) or "" for name in sorted(layout.columns)},
+        letters={name: layout.letter(name) or "" for name in _order(layout)},
+        headers={name: layout.headers.get(name, name) for name in _order(layout)},
+        order=_order(layout),
         unknown_headers=dict(sorted(layout.unknown_headers.items())),
         byte_count=path.stat().st_size,
         versions=_snapshots(),
@@ -255,10 +262,14 @@ def _preview(
     path = service.workbook_path()
 
     letters: dict[str, str] = {}
+    headers: dict[str, str] = {}
+    order: list[str] = []
     next_row = 0
     try:
         layout = locate(path)
-        letters = {name: layout.letter(name) or "" for name in layout.columns}
+        order = _order(layout)
+        letters = {name: layout.letter(name) or "" for name in order}
+        headers = {name: layout.headers.get(name, name) for name in order}
         next_row = layout.last_data_row + 1
     except (WorkbookShapeError, FileNotFoundError):
         pass
@@ -271,6 +282,9 @@ def _preview(
         refusals=sorted(set(built.refusals)),
         first_row=start,
         letters=letters,
+        headers=headers,
+        order=order,
+        numeric_columns=sorted(_MONEY | _QUANTITY | set(appender.FORMULAS)),
         formula_columns=sorted(appender.FORMULAS),
         never_written=sorted(appender.NEVER_WRITTEN),
         rows=[
@@ -279,8 +293,11 @@ def _preview(
                 delivery_id=planned.delivery_id or "",
                 account_sale=planned.account_sale,
                 product=planned.product,
+                is_writable=planned.is_writable,
+                blocked_by=planned.blocked,
                 why=" ".join(planned.notes),
                 cells=_cells(planned, letters, start + offset if start else 0),
+                blanks=_blanks(planned, start),
             )
             for offset, planned in enumerate(built.rows)
         ],
@@ -294,6 +311,14 @@ def _preview(
         saved_as=appended.saved_as.name if appended else None,
         versions=_snapshots(),
     )
+
+
+def _blanks(planned: appender.PlannedRow, start: int) -> dict[str, str]:
+    """The blank labels, with the one that points at another row naming it by row number."""
+    labels = dict(planned.blanks)
+    if planned.counted_with is not None and start:
+        labels["qty_received"] = f"counted on row {start + planned.counted_with}"
+    return labels
 
 
 #: How each written column is shown in the preview. Money and quantities cross the wire as

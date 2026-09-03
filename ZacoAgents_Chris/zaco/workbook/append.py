@@ -77,8 +77,36 @@ class PlannedRow:
     product: str
     account_sale: str
     values: dict[str, object] = field(default_factory=dict)
+    blanks: dict[str, str] = field(default_factory=dict)
+    """Field name to a short label saying why that cell is empty.
+
+    Per cell rather than per row, because the grid puts the reason in the cell it belongs to.
+    One sentence attached to the whole row leaves the reader matching it back to a column.
+    """
+
     notes: list[str] = field(default_factory=list)
-    """Why a cell is blank, where blank was a decision rather than an absence."""
+    """The same reasons at length, for the list beneath the grid."""
+
+    blocked: list[str] = field(default_factory=list)
+    """What is missing before this row could be written at all."""
+
+    counted_with: int | None = None
+    """Offset of the row that carries this consignment's Qty Received, when it is not this one.
+
+    An offset rather than a row number, because the row number depends on where in the book the
+    append lands and that is not known until the file is open. The preview turns it into the
+    number the operator will actually see.
+    """
+
+    @property
+    def is_writable(self) -> bool:
+        return not self.blocked
+
+    def blank(self, name: str, label: str, detail: str = "") -> None:
+        self.values[name] = None
+        self.blanks[name] = label
+        if detail:
+            self.notes.append(detail)
 
 
 @dataclass
@@ -89,7 +117,7 @@ class AppendPlan:
 
     @property
     def is_writable(self) -> bool:
-        return bool(self.rows) and not self.refusals
+        return bool(self.rows) and not self.refusals and all(r.is_writable for r in self.rows)
 
 
 @dataclass
@@ -114,7 +142,12 @@ def _number_or_text(value: str | None) -> object | None:
 
 
 def plan(resolved: Any) -> AppendPlan:
-    """Work out every cell, and every reason not to write one, without opening the workbook."""
+    """Work out every cell, and every reason not to write one, without opening the workbook.
+
+    A row that cannot be written is still built and still shown, with the missing cells labelled.
+    Dropping it and listing the reason separately gives an operator a short grid and a long
+    complaint, and leaves them working out which row the complaint belongs to.
+    """
     from zaco.db.models import RoundStatus
 
     built = AppendPlan()
@@ -133,24 +166,14 @@ def plan(resolved: Any) -> AppendPlan:
         built.refusals.append(resolved.blocking_reason or "The queue is still open.")
 
     staged = resolved.staged
-    # A delivery sends its cartons once. Writing `Qty Received` on both rows of a consignment
-    # that sold under two account sales would double it in every column that sums.
     counted: set[str] = set()
+    first_row_of: dict[str, int] = {}
     rows_per_sale: dict[str, int] = {}
     for row in staged.rows:
         rows_per_sale[row.account_sale] = rows_per_sale.get(row.account_sale, 0) + 1
 
-    for row in staged.rows:
+    for offset, row in enumerate(staged.rows):
         note = resolved.approved.get(row.delivery_id or "")
-        blocked = []
-        if note is None:
-            blocked.append(f"{row.delivery_id or '(no delivery)'} has no approved delivery note")
-        if row.product.short_code is None:
-            blocked.append(f"{row.product.display_name} has no short code")
-        built.refusals.extend(blocked)
-        if blocked or note is None:
-            continue
-
         position = resolved.ledger.for_row(row)
         sale = staged.account_sales.get(row.account_sale)
         planned = PlannedRow(
@@ -160,70 +183,152 @@ def plan(resolved: Any) -> AppendPlan:
             account_sale=row.account_sale,
         )
 
-        planned.values["dn"] = _number_or_text(note.dn) if note.dn else None
-        if not note.dn:
-            planned.notes.append(
-                f"No delivery note, recorded: {note.operator_reason or note.reasoning}"
+        # --- column A, and the date that hangs off it -----------------------------------------
+        if note is None:
+            planned.blocked.append(
+                f"{row.delivery_id or '(no delivery)'} has no approved delivery note"
             )
+            planned.blank(
+                "dn",
+                "DN not captured",
+                f"{row.delivery_id or 'This row'} has no approved delivery note, so column A and "
+                "the date grouped on it are both waiting on the queue.",
+            )
+        elif note.dn:
+            planned.values["dn"] = _number_or_text(note.dn)
+        else:
+            # D11: visibly empty with the reason attached is a recorded answer, and a different
+            # thing from a cell nobody reached.
+            planned.blank(
+                "dn",
+                "no DN, recorded",
+                f"{row.delivery_id}: no delivery note, recorded on purpose -- "
+                f"{note.operator_reason or note.reasoning}",
+            )
+
         planned.values["market_agent"] = row.agent
         planned.values["completed"] = INCOMPLETE
-        planned.values["date"] = (
-            resolved.grouping_dates.get(note.dn) if note.dn else None
-        ) or row.earliest_date
+
+        # The date is the earliest across every row sharing a delivery note, so until the note
+        # is approved this row's own earliest date is a guess that approving one could move.
+        # Showing it anyway would put a figure in the preview that the append might not write.
+        when = (resolved.grouping_dates.get(note.dn) if note and note.dn else None) or (
+            row.earliest_date if note is not None else None
+        )
+        if when is not None:
+            planned.values["date"] = when
+        elif note is None:
+            planned.blank(
+                "date",
+                "awaits DN",
+                "The date is the earliest across every row sharing a delivery note, so approving "
+                "one can move it earlier. It is not settled until the note is.",
+            )
+        else:
+            planned.blank(
+                "date",
+                "no date in the documents",
+                "No document in this round carries a date for this row.",
+            )
+
         # Through `display_account_sale` even when no payment run accounts for the row: the
         # column is the operator's STM No either way, and `PRE*BT*390100` sitting between two
         # bare numbers is the sort of thing that stops a filter working.
         planned.values["stm_no"] = _number_or_text(display_account_sale(row.account_sale))
-        planned.values["description"] = row.product.short_code
 
-        # What was sent belongs to the consignment, not to the row. A consignment that sold under
-        # two account sales makes two rows, and writing its cartons on both would double them in
+        if row.product.short_code is not None:
+            planned.values["description"] = row.product.short_code
+        else:
+            planned.blocked.append(f"{row.product.display_name} has no short code")
+            planned.blank(
+                "description",
+                "code unmapped",
+                f"{row.product.display_name} has no short code. Section 7: the code is the "
+                "operator's own and is not derivable from any report.",
+            )
+
+        # --- what was sent, counted once --------------------------------------------------------
+        # It belongs to the consignment, not to the row. A consignment that sold under two
+        # account sales makes two rows, and writing its cartons on both would double them in
         # every column that sums; a delivery holding two products makes two consignments, and
-        # writing the delivery's total on each would double them again the other way.
+        # writing the delivery total on each would double them again the other way.
         consignment_id = row.consignment_id or ""
         consignment = next(
             (c for c in staged.consignments if c.consignment_id == consignment_id), None
         )
         if consignment_id and consignment_id not in counted:
             counted.add(consignment_id)
+            first_row_of[consignment_id] = offset
             sent = consignment.qty_sent if consignment is not None else None
-            planned.values["qty_received"] = sent
-            if sent is None:
+            if sent is not None:
+                planned.values["qty_received"] = sent
+            else:
                 # Absent is not zero (section 6). The consignment report carries what was sent
                 # and the daily sales file does not, so a round without one simply does not know.
-                planned.notes.append(
-                    "Qty Received is blank: no document in this round says what this consignment "
-                    "was sent. That is absent, not nought."
+                planned.blank(
+                    "qty_received",
+                    "not reported",
+                    "No document in this round says what this consignment was sent. That is "
+                    "absent, not nought.",
                 )
         else:
-            planned.values["qty_received"] = None
-            planned.notes.append(
-                "Qty Received is on the first row of this consignment only; what was sent is sent "
-                "once, however many account sales it sells under."
+            planned.counted_with = first_row_of.get(consignment_id)
+            planned.blank(
+                "qty_received",
+                "counted above",
+                "What was sent is sent once, however many account sales it sells under, so it "
+                "stays on the first row of the consignment.",
             )
 
-        planned.values["opening_stock"] = position.opening if position else None
-        planned.values["cartons_sold"] = row.cartons.net
-        planned.values["price"] = _priced(row, planned)
+        if position is not None and position.opening is not None:
+            planned.values["opening_stock"] = position.opening
+        else:
+            planned.blank(
+                "opening_stock",
+                "not known",
+                "Nothing says what was on the floor when this row started selling, and a running "
+                "balance cannot start from a guess.",
+            )
 
+        planned.values["cartons_sold"] = row.cartons.net
+        price = _priced(row, planned)
+        if price is not None:
+            planned.values["price"] = price
+        else:
+            planned.blank(
+                "price",
+                "nothing net sold",
+                "Price is the money over the net cartons, and this row nets nought.",
+            )
+
+        # --- the payment side ---------------------------------------------------------------------
         # Nett is the payment side's figure for the whole account sale. Splitting one across
         # several rows is section 8's job and has to sum to the payment exactly, so it is left
         # for Phase 5 rather than guessed at here.
-        if sale is not None and sale.nett is not None and rows_per_sale[row.account_sale] == 1:
+        named = display_account_sale(row.account_sale)
+        if sale is None or sale.nett is None:
+            planned.blank(
+                "nett_total",
+                "no payment run",
+                f"No payment document in this round accounts for {named}.",
+            )
+        elif rows_per_sale[row.account_sale] == 1:
             planned.values["nett_total"] = sale.nett
         else:
-            planned.values["nett_total"] = None
-            if sale is not None and sale.nett is not None:
-                planned.notes.append(
-                    f"Nett Total left blank: {sale.display_number} pays R{sale.nett:,.2f} across "
-                    f"{rows_per_sale[row.account_sale]} rows, and apportioning it is section 8."
-                )
-            else:
-                planned.notes.append("Nett Total left blank: no payment run accounts for this row.")
+            planned.blank(
+                "nett_total",
+                f"split across {rows_per_sale[row.account_sale]} rows",
+                f"{sale.display_number} pays R{sale.nett:,.2f} across "
+                f"{rows_per_sale[row.account_sale]} rows, and apportioning it is section 8.",
+            )
 
         paid = sale.date_paid if sale else None
-        planned.values["status"] = f"{paid:%d.%m}" if paid else None
+        if paid is not None:
+            planned.values["status"] = f"{paid:%d.%m}"
+        else:
+            planned.blank("status", "not yet paid")
 
+        built.refusals.extend(planned.blocked)
         built.rows.append(planned)
 
     if not built.rows and not built.refusals:

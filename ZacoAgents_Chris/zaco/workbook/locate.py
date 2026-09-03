@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from dataclasses import field as dc_field
 from pathlib import Path
 from typing import Any
 
@@ -77,6 +78,14 @@ class SheetLayout:
     """Columns the book has that the system does not write. `Buyer note` and `Packhouse` land
     here, and they are the reason nothing may be written by position."""
 
+    headers: dict[str, str] = dc_field(default_factory=dict)
+    """Field name to the header text **as this book writes it**.
+
+    Kept rather than re-derived from `COLUMNS`, because the point of showing an operator where
+    the columns went is to show them their own words. A book that says `STM NO` should say
+    `STM NO` back, not the `STM No` this module happens to match against.
+    """
+
     def index(self, field: str) -> int | None:
         return self.columns.get(field)
 
@@ -89,10 +98,11 @@ class SheetLayout:
         return max(0, self.last_data_row - self.first_data_row + 1)
 
 
-def _score_row(cells: list[Any]) -> tuple[dict[str, int], dict[str, int]]:
+def _score_row(cells: list[Any]) -> tuple[dict[str, int], dict[str, int], dict[str, str]]:
     wanted = {_normalise(text): field for field, text in COLUMNS.items()}
     found: dict[str, int] = {}
     unknown: dict[str, int] = {}
+    headers: dict[str, str] = {}
     for offset, value in enumerate(cells, start=1):
         text = _normalise(value)
         if not text:
@@ -100,9 +110,10 @@ def _score_row(cells: list[Any]) -> tuple[dict[str, int], dict[str, int]]:
         field = wanted.get(text)
         if field is not None and field not in found:
             found[field] = offset
+            headers[field] = str(value).strip()
         elif field is None:
             unknown[str(value).strip()] = offset
-    return found, unknown
+    return found, unknown, headers
 
 
 def locate(path: Path) -> SheetLayout:
@@ -120,7 +131,7 @@ def locate(path: Path) -> SheetLayout:
                 sheet.iter_rows(min_row=1, max_row=MAX_HEADER_SEARCH_ROWS, values_only=True),
                 start=1,
             ):
-                found, unknown = _score_row(list(row))
+                found, unknown, headers = _score_row(list(row))
                 score = len(found)
                 if score > best_score and all(field in found for field in REQUIRED):
                     best_score = score
@@ -131,6 +142,7 @@ def locate(path: Path) -> SheetLayout:
                         last_data_row=max(sheet.max_row, row_number),
                         columns=found,
                         unknown_headers=unknown,
+                        headers=headers,
                     )
         if best is None:
             raise WorkbookShapeError(

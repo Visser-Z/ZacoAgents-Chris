@@ -132,3 +132,86 @@ tr.inactive td { color: var(--muted); }
 
 code, .mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 0.92em; }
 .muted { color: var(--muted); }
+
+/* --- The workbook grid ----------------------------------------------------------------------
+   A preview of rows about to be written into a 23-column spreadsheet. It has to read like the
+   spreadsheet it is going into, which means the column letters visible, the row numbers the
+   rows will actually take, and both staying put while the operator scrolls sideways. */
+
+main.wide { max-width: none; }
+
+.grid-wrap {
+  overflow: auto;
+  max-height: 70vh;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--panel);
+}
+
+table.grid {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.88em;
+  white-space: nowrap;
+}
+
+table.grid th,
+table.grid td {
+  border-bottom: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  padding: 0.35rem 0.55rem;
+  vertical-align: middle;
+  background: var(--panel);
+}
+
+table.grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.82em;
+  line-height: 1.25;
+  border-bottom: 2px solid var(--line);
+}
+table.grid thead th .letter { color: var(--accent); font-weight: 700; margin-right: 0.35em; }
+table.grid thead th .header { color: var(--muted); text-transform: uppercase; }
+
+/* The row number stays put, because a cell in column S means nothing without its row. */
+table.grid th.rownum,
+table.grid td.rownum {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--bg);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  border-right: 2px solid var(--line);
+}
+table.grid thead th.rownum { z-index: 3; }
+
+table.grid td.num { text-align: right; font-variant-numeric: tabular-nums; }
+table.grid td.formula { color: var(--muted); font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+table.grid td.theirs { background: repeating-linear-gradient(45deg, #fafafa, #fafafa 4px, #f2f3f3 4px, #f2f3f3 8px); }
+table.grid tr.blocked td.rownum { background: var(--warn-bg); color: var(--warn-ink); }
+
+.chip {
+  display: inline-block;
+  font-size: 0.78em;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  border: 1px dashed var(--line);
+  border-radius: 3px;
+  padding: 0.05em 0.4em;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.chip.stops { border-color: var(--warn-line); color: var(--warn-ink); background: var(--warn-bg); }
+
+.legend { display: flex; flex-wrap: wrap; gap: 0.35rem 1rem; margin: 0.5rem 0 1.25rem; font-size: 0.88em; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
+.legend .swatch { width: 1.1rem; height: 0.85rem; border: 1px solid var(--line); border-radius: 2px; display: inline-block; }
+.legend .swatch.formula { background: #fff; }
+.legend .swatch.theirs { background: repeating-linear-gradient(45deg, #fafafa, #fafafa 4px, #f2f3f3 4px, #f2f3f3 8px); }

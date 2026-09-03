@@ -150,12 +150,10 @@ def test_qty_received_is_written_once_per_consignment_and_never_guessed(
 
     for row in rows:
         if not row["cells"]["qty_received"]:
-            assert (
-                "first row of this consignment" in row["why"] or "absent, not nought" in row["why"]
-            ), f"{row['delivery_id']} has a blank Qty Received and no reason given"
-    assert not any(row["cells"]["qty_received"] == "0" for row in rows), (
-        "absent was written as zero"
-    )
+            reason = row["blanks"].get("qty_received", "")
+            assert reason, f"{row['delivery_id']} has a blank Qty Received and no reason given"
+            assert reason.startswith("counted on row") or reason == "not reported", reason
+    assert not any(row["cells"]["qty_received"] == "0" for row in rows), "absent was written as 0"
 
 
 def test_what_was_sent_is_read_off_the_consignment_report_when_there_is_one(
@@ -166,6 +164,72 @@ def test_what_was_sent_is_read_off_the_consignment_report_when_there_is_one(
     round_id = _settle(operator, SALES, "ConsignmentReports_20260525-20260531.txt", PAYMENTS)
     rows = operator.get(f"/api/rounds/{round_id}/append").json()["rows"]
     assert any(row["cells"]["qty_received"] for row in rows), "nothing carried what was sent"
+
+
+# --- what the grid needs -----------------------------------------------------------------------
+
+
+def test_the_preview_carries_the_book_s_own_headers_in_the_book_s_own_order(
+    operator: TestClient,
+) -> None:
+    """The grid shows the operator their own words above their own letters. Prettifying the
+    system's field names instead would hide a header that does not say what they think."""
+    round_id = _settle(operator, SALES, PAYMENTS)
+    body = operator.get(f"/api/rounds/{round_id}/append").json()
+
+    assert body["headers"]["baby_stock"] == "Baby Stock"
+    assert body["headers"]["notes"] == "NOTES"
+    assert body["order"][:3] == ["dn", "market_agent", "completed"]
+    assert [body["letters"][f] for f in body["order"][:3]] == ["A", "B", "D"]
+    assert "price" in body["numeric_columns"]
+    assert "market_agent" not in body["numeric_columns"]
+
+
+def test_a_row_that_cannot_be_written_is_still_shown_with_what_is_missing(
+    operator: TestClient,
+) -> None:
+    """Dropping it and listing the reason separately gives a short grid and a long complaint, and
+    leaves the operator working out which row the complaint belongs to."""
+    files = [("files", (SALES, (DATA / SALES).read_bytes(), "text/csv"))]
+    round_id = operator.post("/api/rounds", files=files).json()["summary"]["id"]
+
+    body = operator.get(f"/api/rounds/{round_id}/append").json()
+    assert body["is_writable"] is False
+    assert body["rows"], "the preview showed nothing at all"
+
+    stuck = [r for r in body["rows"] if not r["is_writable"]]
+    assert stuck, "every row claimed to be writable on an unanswered round"
+    assert all(r["blocked_by"] for r in stuck)
+    assert stuck[0]["blanks"]["dn"] == "DN not captured"
+    assert stuck[0]["blanks"]["description"] == "code unmapped"
+    assert stuck[0]["cells"]["dn"] == ""
+
+
+def test_every_blank_cell_carries_its_own_reason(operator: TestClient) -> None:
+    """A blank nobody explained is indistinguishable from one nobody got to."""
+    round_id = _settle(operator, SALES, PAYMENTS)
+    body = operator.get(f"/api/rounds/{round_id}/append").json()
+
+    unexplained = [
+        (row["row_number"], name)
+        for row in body["rows"]
+        for name in body["order"]
+        if name not in body["never_written"]
+        and name not in body["formula_columns"]
+        and not row["cells"][name]
+        and not row["blanks"].get(name)
+    ]
+    assert not unexplained, f"blank with no reason: {unexplained}"
+
+
+def test_a_nett_split_across_rows_says_so_in_the_cell(operator: TestClient) -> None:
+    """Section 8 apportions it. Until then the cell says why, rather than showing nothing."""
+    round_id = _settle(operator, SALES, PAYMENTS)
+    labels = {
+        row["blanks"].get("nett_total", "")
+        for row in operator.get(f"/api/rounds/{round_id}/append").json()["rows"]
+    }
+    assert any("split across" in label or "no payment run" in label for label in labels), labels
 
 
 # --- the append ------------------------------------------------------------------------------------

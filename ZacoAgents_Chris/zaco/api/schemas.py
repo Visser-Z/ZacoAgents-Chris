@@ -459,6 +459,8 @@ class WorkbookStateOut(BaseModel):
     row_count: int = 0
     byte_count: int = 0
     letters: dict[str, str] = Field(default_factory=dict)
+    headers: dict[str, str] = Field(default_factory=dict)
+    order: list[str] = Field(default_factory=list)
     unknown_headers: dict[str, int] = Field(default_factory=dict)
     """Columns the book has that this system does not write. `Buyer note` and `Packhouse` land
     here, and they are the reason nothing may be written by position."""
@@ -480,10 +482,14 @@ class PreviewRowOut(BaseModel):
     delivery_id: str
     account_sale: str
     product: str
+    is_writable: bool = True
+    blocked_by: list[str] = Field(default_factory=list)
     why: str = ""
-    """Why a cell is blank, where blank was a decision rather than an absence."""
+    """Every reason at length, for the list beneath the grid."""
 
     cells: dict[str, str] = Field(default_factory=dict)
+    blanks: dict[str, str] = Field(default_factory=dict)
+    """Field name to a short label saying why that cell is empty, shown in the cell itself."""
 
 
 class AppendPreviewOut(BaseModel):
@@ -495,6 +501,14 @@ class AppendPreviewOut(BaseModel):
     refusals: list[str] = Field(default_factory=list)
     first_row: int = 0
     letters: dict[str, str] = Field(default_factory=dict)
+    headers: dict[str, str] = Field(default_factory=dict)
+    """Field name to the header text as this book writes it, so the grid shows the operator
+    their own words above their own letters."""
+
+    order: list[str] = Field(default_factory=list)
+    """Field names in the order the columns sit in this book, left to right."""
+
+    numeric_columns: list[str] = Field(default_factory=list)
     formula_columns: list[str] = Field(default_factory=list)
     """Columns that belong to the operator. A computed value is never written into one."""
 

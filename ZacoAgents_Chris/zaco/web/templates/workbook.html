@@ -1,9 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Workbook{% endblock %}
+{% block main_class %}wide{% endblock %}
 
 {% block content %}
 <h1>The operator's book</h1>
-<p class="muted">Rows are appended beneath what is already there, never rebuilt. Eight columns hold
+<p class="lede">Rows are appended beneath what is already there, never rebuilt. Eight columns hold
   the operator's own formulas and a computed value is never written into one. The NOTES column is
   not read, not derived and not written.</p>
 
@@ -42,49 +43,27 @@
 
   const size = (n) => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} kB`);
   const when = (s) => (s ? esc(String(s).slice(0, 16).replace("T", " ")) : "-");
-  const label = (f) => f.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-
-  // The order the columns sit in *this* book, which is the order worth reading them in.
-  const ordered = (letters) =>
-    Object.keys(letters).sort((a, b) => (letters[a].length - letters[b].length) || letters[a].localeCompare(letters[b]));
+  const letterOf = (i) => {
+    let out = "";
+    while (i > 0) { out = String.fromCharCode(64 + ((i - 1) % 26 + 1)) + out; i = Math.floor((i - 1) / 26); }
+    return out;
+  };
 
   function drawState() {
     if (!book.is_readable) {
       stateBox.innerHTML = `<div class="warning">${esc(book.problem)}</div>`;
       return;
     }
-    const letters = book.letters;
-    const unknown = Object.entries(book.unknown_headers);
+    const total = book.order.length + Object.keys(book.unknown_headers).length;
     stateBox.innerHTML = `
       <div class="panel"><table><tbody>
         <tr><td>File</td><td class="mono">${esc(book.filename)} <span class="muted">(${size(book.byte_count)})</span></td></tr>
-        <tr><td>Data sheet</td><td class="mono">${esc(book.sheet_name)}</td>
-          <td class="muted">found by its header row, not by position</td></tr>
+        <tr><td>Data sheet</td><td class="mono">${esc(book.sheet_name)}
+          <span class="muted">&mdash; found by its header row, not by position</span></td></tr>
+        <tr><td>Columns</td><td>${total}, of which ${Object.keys(book.unknown_headers).length}
+          <span class="muted">belong to the operator and are never touched</span></td></tr>
         <tr><td>Rows already in it</td><td>${book.row_count}</td></tr>
-      </tbody></table></div>
-
-      <h2>Where the columns actually are</h2>
-      <p class="muted">The brief describes 21 columns, A to U. This book has ${Object.keys(letters).length + unknown.length}.
-        Every letter below was resolved from the header text in the file, and the formulas are
-        written from these — not from the letters in the brief.</p>
-      <div class="panel"><table>
-        <thead><tr><th>Column</th><th>Header</th><th>Kind</th></tr></thead>
-        <tbody>${ordered(letters).map((f) => `<tr>
-          <td class="mono">${esc(letters[f])}</td>
-          <td>${esc(label(f))}</td>
-          <td class="muted">${current && current.formula_columns.includes(f)
-            ? '<span class="tag">formula &mdash; the operator&#39;s</span>'
-            : current && current.never_written.includes(f)
-              ? '<span class="tag">never written</span>'
-              : "written"}</td>
-        </tr>`).join("")}
-        ${unknown.map(([name, index]) => `<tr>
-          <td class="mono">${esc(String.fromCharCode(64 + index))}</td>
-          <td>${esc(name)}</td>
-          <td class="muted"><span class="tag">not ours</span> left exactly as it is</td>
-        </tr>`).join("")}
-        </tbody>
-      </table></div>`;
+      </tbody></table></div>`;
   }
 
   function drawReady() {
@@ -100,7 +79,7 @@
       </table></div>` : "";
 
     readyBox.innerHTML = `
-      <h2>Ready to append <span class="muted">(${book.ready_rounds.length})</span></h2>
+      <h2>Rounds <span class="muted">(${book.ready_rounds.length} ready)</span></h2>
       ${book.ready_rounds.length
         ? `<div class="panel"><table>
              <thead><tr><th>Round</th><th>Queue closed</th><th>By</th><th></th></tr></thead>
@@ -112,7 +91,7 @@
              </tr>`).join("")}</tbody>
            </table></div>`
         : `<p class="muted">No round is waiting. A round reaches here once every question in its
-             queue is answered and the queue is closed.</p>`}
+             queue is answered and the queue is closed on the Resolution queue page.</p>`}
       ${done}`;
 
     readyBox.querySelectorAll("[data-preview]").forEach((b) =>
@@ -123,57 +102,109 @@
     try {
       current = await json("GET", `/api/rounds/${id}/append`);
       drawPreview();
-      drawState();
       previewBox.hidden = false;
       previewBox.scrollIntoView({ behavior: "smooth", block: "start" });
     } catch (e) { window.alert(e.message); }
   }
 
+  // One cell of the grid. A blank that was a decision says so where the value would have been;
+  // a blank nobody explained is indistinguishable from one nobody got to.
+  function cell(d, row, name) {
+    const classes = [];
+    if (d.numeric_columns.includes(name)) classes.push("num");
+    if (d.formula_columns.includes(name)) classes.push("formula");
+    if (d.never_written.includes(name)) classes.push("theirs");
+
+    let inner = esc(row.cells[name] || "");
+    if (!inner && row.blanks[name]) {
+      const stops = row.blocked_by.length && ["dn", "description", "date"].includes(name);
+      inner = `<span class="chip${stops ? " stops" : ""}">${esc(row.blanks[name])}</span>`;
+    }
+    return `<td class="${classes.join(" ")}">${inner}</td>`;
+  }
+
+  function grid(d) {
+    const columns = d.order;
+    const unknown = Object.entries(book.unknown_headers || {});
+    // The operator's own columns sit between ours in the real file, so they sit between ours
+    // here too -- shown, hatched, and empty, which is exactly what the append does to them.
+    const all = [];
+    columns.forEach((name) => all.push({ kind: "ours", name, letter: d.letters[name], header: d.headers[name] }));
+    unknown.forEach(([header, index]) => all.push({ kind: "theirs", letter: letterOf(index), header, index }));
+    all.sort((a, b) => a.letter.length - b.letter.length || a.letter.localeCompare(b.letter));
+
+    return `
+      <div class="grid-wrap"><table class="grid">
+        <thead><tr>
+          <th class="rownum">#</th>
+          ${all.map((c) => `<th><span class="letter">${esc(c.letter)}</span>
+            <span class="header">${esc(c.header)}</span></th>`).join("")}
+        </tr></thead>
+        <tbody>${d.rows.map((row) => `
+          <tr class="${row.is_writable ? "" : "blocked"}">
+            <td class="rownum">${esc(row.row_number)}</td>
+            ${all.map((c) => c.kind === "theirs"
+              ? '<td class="theirs"></td>'
+              : cell(d, row, c.name)).join("")}
+          </tr>`).join("")}</tbody>
+      </table></div>
+      <div class="legend">
+        <span><span class="swatch formula"></span> grey monospace &mdash; the operator's formula, written for the new row number</span>
+        <span><span class="swatch theirs"></span> hatched &mdash; not ours; left exactly as it is</span>
+        <span><span class="chip">reason</span> a blank that was decided, not missed</span>
+        <span><span class="chip stops">reason</span> a blank that stops the append</span>
+      </div>`;
+  }
+
   function drawPreview() {
     const d = current;
-    const letters = d.letters;
-    const columns = ordered(letters);
+    const stuck = d.rows.filter((r) => !r.is_writable);
     const explained = d.rows.filter((r) => r.why);
 
     previewBox.innerHTML = `
-      <h2>Round #${d.round_id} &mdash; ${d.rows.length} row(s), starting at row ${d.first_row}</h2>
-      ${d.refusals.length
-        ? `<div class="warning">${d.refusals.map(esc).join("<br>")}</div>`
-        : `<div class="notice">Nothing has been written. This is what would be.</div>`}
+      <h2>Round #${d.round_id}
+        <span class="muted">&mdash; ${d.rows.length} row(s)${d.first_row ? `, starting at row ${d.first_row}` : ""}</span></h2>
+      ${d.appended_at
+        ? `<div class="notice">Appended ${when(d.appended_at)} by ${esc(d.appended_by || "?")},
+             rows ${esc(d.appended_rows)}. The version before it was saved as
+             <span class="mono">${esc(d.saved_as || "")}</span>.</div>`
+        : d.is_writable
+          ? `<div class="notice">Nothing has been written. This is the round cell by cell, as it would go in.</div>`
+          : `<div class="warning">${d.refusals.map(esc).join("<br>")}</div>`}
 
-      <div class="panel" style="overflow-x:auto"><table>
-        <thead><tr><th>Row</th>${columns.map((f) => `<th class="mono" title="${esc(label(f))}">${esc(letters[f])}</th>`).join("")}</tr></thead>
-        <tbody>${d.rows.map((r) => `<tr>
-          <td class="mono muted">${esc(r.row_number)}</td>
-          ${columns.map((f) => `<td class="${d.formula_columns.includes(f) ? "mono muted" : ""}"
-            style="white-space:nowrap">${esc(r.cells[f] || "")}</td>`).join("")}
-        </tr>`).join("")}</tbody>
-      </table></div>
-      <p class="muted">The grey cells are formulas written for the new row number. The empty ones in
-        the NOTES column are the operator's own margin, left alone.</p>
+      ${d.rows.length ? grid(d) : ""}
+
+      ${stuck.length ? `
+        <h3>Rows that cannot be written yet <span class="muted">(${stuck.length} of ${d.rows.length})</span></h3>
+        <p class="muted">Answered on the Resolution queue. Until every one of them is, the append
+          is refused &mdash; a book with some of a round in it is worse than one with none.</p>
+        <div class="panel"><table>
+          <thead><tr><th>Row</th><th>Delivery</th><th>Product</th><th>What is missing</th></tr></thead>
+          <tbody>${stuck.map((r) => `<tr>
+            <td class="mono muted">${esc(r.row_number)}</td>
+            <td class="mono">${esc(r.delivery_id)}</td>
+            <td>${esc(r.product)}</td>
+            <td>${r.blocked_by.map((b) => esc(b)).join("<br>")}</td></tr>`).join("")}</tbody>
+        </table></div>` : ""}
 
       ${explained.length ? `
-        <h3>Cells left blank on purpose <span class="muted">(${explained.length})</span></h3>
-        <p class="muted">A blank that nobody explained is indistinguishable from one nobody got to.</p>
+        <h3>Blanks in full <span class="muted">(${explained.length} row(s))</span></h3>
         ${explained.map((r) => `<div class="panel">
-          <strong class="mono">${esc(r.delivery_id)} &middot; ${esc(r.account_sale)}</strong>
-          <span class="muted">${esc(r.product)}</span>
-          <p class="muted" style="margin:.3rem 0 0">${esc(r.why)}</p>
+          <strong class="mono">row ${esc(r.row_number)} &middot; ${esc(r.delivery_id)}</strong>
+          <span class="muted">${esc(r.product)} &middot; ${esc(r.account_sale)}</span>
+          <p class="muted" style="margin:.35rem 0 0">${esc(r.why)}</p>
         </div>`).join("")}` : ""}
 
-      ${d.appended_at ? `
-        <div class="notice">Appended ${when(d.appended_at)} by ${esc(d.appended_by || "?")},
-          rows ${esc(d.appended_rows)}. The version before it was saved as
-          <span class="mono">${esc(d.saved_as || "")}</span>.</div>`
-        : `<div class="panel">
-            <button data-append="${d.round_id}" ${d.is_writable ? "" : "disabled"}>
-              Append ${d.rows.length} row(s) to the book
-            </button>
-            <p class="muted" style="font-size:.9em;margin:.5rem 0 0">
-              The book is copied aside first, in the same step. If the write fails, the copy goes
-              back and the round stays waiting &mdash; there is no half-written state to land in.
-            </p>
-          </div>`}`;
+      ${d.appended_at ? "" : `
+        <div class="panel">
+          <button data-append="${d.round_id}" ${d.is_writable ? "" : "disabled"}>
+            Append ${d.rows.length} row(s) to the book
+          </button>
+          <p class="muted" style="font-size:.9em;margin:.5rem 0 0">
+            The book is copied aside first, in the same step. If the write fails, the copy goes
+            back and the round stays waiting &mdash; there is no half-written state to land in.
+          </p>
+        </div>`}`;
 
     const button = previewBox.querySelector("[data-append]");
     if (button) button.addEventListener("click", async () => {
@@ -225,8 +256,12 @@
   }
 
   (async () => {
-    book = await json("GET", "/api/workbook");
-    drawState(); drawReady(); drawVersions();
+    try {
+      book = await json("GET", "/api/workbook");
+      drawState(); drawReady(); drawVersions();
+    } catch (e) {
+      stateBox.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+    }
   })();
 })();
 </script>
