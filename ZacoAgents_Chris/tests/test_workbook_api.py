@@ -383,3 +383,41 @@ def test_an_unappended_round_is_not_held_against_the_book_at_all(operator: TestC
 
     assert [r["round_id"] for r in state["ready_rounds"]] == [round_id]
     assert state["appended_rounds"] == []
+
+
+def test_an_appended_round_previews_at_the_rows_it_wrote_not_the_next_free_one(
+    operator: TestClient,
+) -> None:
+    """The row number goes into every formula, so the wrong one is not a cosmetic slip."""
+    round_id = _settle(operator, SALES, PAYMENTS)
+    written = operator.post(f"/api/rounds/{round_id}/append").json()
+    first, last = written["first_row"], int(written["appended_rows"].split("-")[1])
+
+    again = operator.get(f"/api/rounds/{round_id}/append").json()
+
+    assert again["first_row"] == first
+    assert [r["row_number"] for r in again["rows"]] == [str(n) for n in range(first, last + 1)]
+
+
+def test_the_formulas_of_an_appended_round_match_the_cells_the_book_holds(
+    operator: TestClient, book_is_put_back: Path
+) -> None:
+    round_id = _settle(operator, SALES, PAYMENTS)
+    operator.post(f"/api/rounds/{round_id}/append")
+
+    preview = operator.get(f"/api/rounds/{round_id}/append").json()
+    sheet = load_workbook(book_is_put_back)[preview["headers"] and "Sheet1"]
+    for row in preview["rows"]:
+        for field in preview["formula_columns"]:
+            letter = preview["letters"][field]
+            assert sheet[f"{letter}{row['row_number']}"].value == row["cells"][field]
+
+
+def test_an_appended_round_names_the_copy_taken_before_it(operator: TestClient) -> None:
+    round_id = _settle(operator, SALES, PAYMENTS)
+    written = operator.post(f"/api/rounds/{round_id}/append").json()
+
+    again = operator.get(f"/api/rounds/{round_id}/append").json()
+
+    assert again["saved_as"] == written["saved_as"]
+    assert again["saved_as"]

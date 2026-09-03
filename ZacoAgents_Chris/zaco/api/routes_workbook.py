@@ -208,6 +208,16 @@ def _agreements(
     return found
 
 
+def _saved_as(round_id: int) -> str | None:
+    """The copy taken before this round was appended, found by the label the append gave it.
+
+    Looked up by label rather than parsed out of the event's sentence, and `None` when retention
+    has already dropped it -- a version that is gone must read as gone, not as a blank name.
+    """
+    label = f"before round {round_id}"
+    return next((s.name for s in snapshot.listing() if s.label == label), None)
+
+
 def _as_text(value: object) -> str | None:
     """The same reading `read_rows` gives a cell, so the two sides compare like with like."""
     if value is None:
@@ -355,7 +365,10 @@ def _preview(
     except (WorkbookShapeError, FileNotFoundError):
         pass
 
-    start = appended.first_row if appended else next_row
+    # A round that has already been appended is shown at the rows it actually wrote, not at the
+    # next free row. Getting this wrong is not cosmetic: the row number goes into every formula,
+    # so the preview would print `=IFERROR(P10*70%,"-")` for a cell the book holds as `P5`.
+    start = appended.first_row if appended else (round_.appended_first_row or next_row)
     return AppendPreviewOut(
         round_id=round_.id,
         status=round_.status,
@@ -389,7 +402,7 @@ def _preview(
             if round_.appended_first_row is None
             else f"{round_.appended_first_row}-{round_.appended_last_row}"
         ),
-        saved_as=appended.saved_as.name if appended else None,
+        saved_as=appended.saved_as.name if appended else _saved_as(round_.id),
         versions=_snapshots(),
     )
 

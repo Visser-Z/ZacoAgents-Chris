@@ -183,11 +183,16 @@
 
     previewBox.innerHTML = `
       <h2>Round #${d.round_id}
-        <span class="muted">&mdash; ${d.rows.length} row(s)${d.first_row ? `, starting at row ${d.first_row}` : ""}</span></h2>
+        <span class="muted">&mdash; ${d.rows.length} row(s)${d.first_row
+          ? `, ${d.appended_at ? "at" : "starting at"} row ${d.first_row}` : ""}</span></h2>
       ${d.appended_at
         ? `<div class="notice">Appended ${when(d.appended_at)} by ${esc(d.appended_by || "?")},
-             rows ${esc(d.appended_rows)}. The version before it was saved as
-             <span class="mono">${esc(d.saved_as || "")}</span>.</div>`
+             rows ${esc(d.appended_rows)}.${d.saved_as
+               ? ` The version before it was saved as <span class="mono">${esc(d.saved_as)}</span>.`
+               : " The version before it is no longer among the kept copies."}
+             <br><span class="muted">These rows are worked out from the round's documents again
+             now, and drawn at the rows it wrote. <em>Already in the book</em> above says whether
+             the file still holds them.</span></div>`
         : d.is_writable
           ? `<div class="notice">Nothing has been written. This is the round cell by cell, as it would go in.</div>`
           : `<div class="warning">${d.refusals.map(esc).join("<br>")}</div>`}
