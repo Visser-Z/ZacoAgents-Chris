@@ -421,3 +421,42 @@ def test_an_appended_round_names_the_copy_taken_before_it(operator: TestClient) 
 
     assert again["saved_as"] == written["saved_as"]
     assert again["saved_as"]
+
+
+# --- who may do it -----------------------------------------------------------------------------------
+
+
+def test_closing_a_queue_does_not_carry_the_right_to_write_the_book(
+    client: TestClient, db: Session, operator: TestClient
+) -> None:
+    round_id = _settle(operator, SALES, PAYMENTS)
+    _make_user(db, "resolver@example.com", [Permission.INGEST, Permission.RESOLVE])
+    client.post("/api/auth/login", json={"email": "resolver@example.com", "password": PASSWORD})
+
+    assert client.post(f"/api/rounds/{round_id}/append").status_code == 403
+    assert client.get(f"/api/rounds/{round_id}/append").status_code == 403
+    assert client.get("/api/workbook").status_code == 200, "reading the state is not writing it"
+
+
+def test_the_stm_column_follows_d7_even_with_no_payment_run_behind_the_row(
+    operator: TestClient,
+) -> None:
+    """D7 belongs to the column, not to the payment run. A row whose account sale appears in no
+    payment document still goes into the operator's STM No column and still has to look like the
+    rows around it -- `PRE*BT*390100` sitting between two bare numbers stops a filter working.
+
+    `JOH*SUB*5644200/1` is the other half of the same rule: it has no bare number, so it keeps
+    the whole reference. Dropping to `5644200/1` would lose which agent ran it, and `5640001/1`
+    and `5640001/2` are already two separate April runs worth R5,100 and R3,230.
+    """
+    round_id = _settle(operator, SALES)
+    values = [
+        row["cells"]["stm_no"]
+        for row in operator.get(f"/api/rounds/{round_id}/append").json()["rows"]
+    ]
+    assert values, "the fixture produced no rows"
+    for value in values:
+        bare = value.rsplit("*", 1)[-1]
+        assert not bare.isdigit() or "*" not in value, (
+            f"{value} kept its reference prefix even though it has a bare number"
+        )
