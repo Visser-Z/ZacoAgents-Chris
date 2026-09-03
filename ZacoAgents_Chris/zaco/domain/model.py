@@ -308,6 +308,21 @@ class SkippedDuplicate:
     source: str
 
 
+def display_account_sale(number: str) -> str:
+    """D7: the bare number where one exists, the full reference where it does not.
+
+    `PRE*BT*382405` shows as `382405`, matching the operator's existing rows. Subtropico's
+    `JOH*SUB*5644200/1` has no numeric form and keeps its suffix, because `5640001/1` and
+    `5640001/2` are two separate April payment runs worth R5,100 and R3,230.
+
+    Lives here rather than beside the payment run it usually belongs to, because a row can name
+    an account sale that no payment document in the round accounts for -- and that row still
+    goes into the operator's STM No column, where it has to look like the rows around it.
+    """
+    tail = number.rsplit("*", 1)[-1] if "*" in number else number
+    return tail if tail.isdigit() else number
+
+
 @dataclass
 class AccountSale:
     """A payment run the agent closed off. The workbook's STM No, column E."""
@@ -332,14 +347,7 @@ class AccountSale:
 
     @property
     def display_number(self) -> str:
-        """D7: the bare number where one exists, the full reference where it does not.
-
-        `PRE*BT*382405` shows as `382405`, matching the operator's existing rows. Subtropico's
-        `JOH*SUB*5644200/1` has no numeric form and keeps its suffix, because `5640001/1` and
-        `5640001/2` are two separate April payment runs worth R5,100 and R3,230.
-        """
-        tail = self.number.rsplit("*", 1)[-1] if "*" in self.number else self.number
-        return tail if tail.isdigit() else self.number
+        return display_account_sale(self.number)
 
     @property
     def deduction_share(self) -> Decimal | None:

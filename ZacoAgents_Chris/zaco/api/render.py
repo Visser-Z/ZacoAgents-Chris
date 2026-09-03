@@ -12,6 +12,9 @@ from decimal import Decimal
 
 from zaco.api.schemas import CartonsOut, ConsignmentOut
 from zaco.domain.model import Cartons, Consignment
+from zaco.domain.model import (
+    display_account_sale as _display_account_sale,
+)
 
 
 def number(value: Decimal) -> str:
@@ -32,8 +35,7 @@ def optional_money(value: Decimal | None) -> str | None:
 
 def display_account_sale(number_: str) -> str:
     """D7: the bare number where one exists, the full reference where it does not."""
-    tail = number_.rsplit("*", 1)[-1] if "*" in number_ else number_
-    return tail if tail.isdigit() else number_
+    return _display_account_sale(number_)
 
 
 def cartons(value: Cartons) -> CartonsOut:

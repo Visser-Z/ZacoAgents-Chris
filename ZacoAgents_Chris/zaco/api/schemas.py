@@ -410,3 +410,98 @@ class DecideSuspensionIn(BaseModel):
     chosen_source: str = Field(min_length=1)
     reason: str = Field(min_length=1)
     """Mandatory. A choice with no reason is unusable to whoever reads it next quarter (D12)."""
+
+
+# --- the workbook (section 5) --------------------------------------------------------------------
+
+
+class SnapshotOut(BaseModel):
+    """One saved version of the operator's book."""
+
+    name: str
+    taken_at: datetime
+    label: str = ""
+    byte_count: int
+
+
+class AppendedRowOut(BaseModel):
+    """Which rows of the book one round wrote."""
+
+    round_id: int
+    first_row: int
+    last_row: int
+    appended_at: datetime | None = None
+    appended_by: str | None = None
+
+
+class ReadyRoundOut(BaseModel):
+    """A round whose queue is closed and which has not been appended yet."""
+
+    round_id: int
+    label: str = ""
+    resolved_at: datetime | None = None
+    resolved_by: str | None = None
+
+
+class WorkbookStateOut(BaseModel):
+    """The book as it stands, and the letters its columns actually resolved to.
+
+    `letters` is not decoration. The brief prints 21 columns A to U; the real book has 23, so
+    `Baby Stock` is at L and not K. Showing what was resolved is the only way an operator can
+    check that the system is writing into the columns they think it is.
+    """
+
+    filename: str
+    is_readable: bool
+    problem: str | None = None
+    sheet_name: str | None = None
+    header_row: int | None = None
+    row_count: int = 0
+    byte_count: int = 0
+    letters: dict[str, str] = Field(default_factory=dict)
+    unknown_headers: dict[str, int] = Field(default_factory=dict)
+    """Columns the book has that this system does not write. `Buyer note` and `Packhouse` land
+    here, and they are the reason nothing may be written by position."""
+
+    versions: list[SnapshotOut] = Field(default_factory=list)
+    appended_rounds: list[AppendedRowOut] = Field(default_factory=list)
+    ready_rounds: list[ReadyRoundOut] = Field(default_factory=list)
+
+
+class PreviewRowOut(BaseModel):
+    """One row as it would be written.
+
+    `cells` is kept in its own dict rather than flattened alongside these fields, because one of
+    the workbook's own columns is called NOTES and a flattened shape let it quietly overwrite the
+    row's explanation of itself.
+    """
+
+    row_number: str
+    delivery_id: str
+    account_sale: str
+    product: str
+    why: str = ""
+    """Why a cell is blank, where blank was a decision rather than an absence."""
+
+    cells: dict[str, str] = Field(default_factory=dict)
+
+
+class AppendPreviewOut(BaseModel):
+    """Exactly what would be written, or exactly what was."""
+
+    round_id: int
+    status: str
+    is_writable: bool
+    refusals: list[str] = Field(default_factory=list)
+    first_row: int = 0
+    letters: dict[str, str] = Field(default_factory=dict)
+    formula_columns: list[str] = Field(default_factory=list)
+    """Columns that belong to the operator. A computed value is never written into one."""
+
+    never_written: list[str] = Field(default_factory=list)
+    rows: list[PreviewRowOut] = Field(default_factory=list)
+    appended_at: datetime | None = None
+    appended_by: str | None = None
+    appended_rows: str | None = None
+    saved_as: str | None = None
+    versions: list[SnapshotOut] = Field(default_factory=list)

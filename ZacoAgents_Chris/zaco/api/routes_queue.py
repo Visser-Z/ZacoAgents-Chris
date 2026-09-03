@@ -207,10 +207,19 @@ def reopen(
     """Put a closed or set-aside round back to staged, so a document can be taken out of it.
 
     The mistake is usually only noticed later, so refusing to reopen would leave a wrong document
-    in the figures permanently. Phase 4 adds the second guard: a round already appended to the
-    workbook cannot be reopened, because an append cannot be unwritten.
+    in the figures permanently. A round already appended to the workbook is the exception: an
+    append cannot be unwritten, so the book is corrected by rolling it back, not the round.
     """
     round_ = _round_or_404(db, round_id)
+    if round_.appended_at is not None:
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"Round {round_.id} was appended to the workbook on "
+            f"{round_.appended_at:%d %b %Y}, writing rows "
+            f"{round_.appended_first_row}-{round_.appended_last_row}. Rows are appended, never "
+            "rebuilt, so reopening it would leave the round and the book disagreeing. Correct "
+            "the book by rolling it back to a saved version instead.",
+        )
     if round_.status == RoundStatus.STAGED.value:
         raise HTTPException(
             status.HTTP_409_CONFLICT,

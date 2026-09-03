@@ -1,0 +1,233 @@
+{% extends "base.html" %}
+{% block title %}Workbook{% endblock %}
+
+{% block content %}
+<h1>The operator's book</h1>
+<p class="muted">Rows are appended beneath what is already there, never rebuilt. Eight columns hold
+  the operator's own formulas and a computed value is never written into one. The NOTES column is
+  not read, not derived and not written.</p>
+
+<div id="state"></div>
+<div id="ready"></div>
+<div id="preview" hidden></div>
+<div id="versions"></div>
+
+<script>
+(() => {
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  const stateBox = document.getElementById("state");
+  const readyBox = document.getElementById("ready");
+  const previewBox = document.getElementById("preview");
+  const versionsBox = document.getElementById("versions");
+
+  let book = null;
+  let current = null;
+
+  async function json(method, url, body) {
+    const response = await fetch(url, {
+      method,
+      headers: body === undefined ? {} : { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      const d = payload && payload.detail;
+      throw new Error(typeof d === "string" ? d : d ? JSON.stringify(d) : `Failed (${response.status})`);
+    }
+    return payload;
+  }
+
+  const size = (n) => (n < 1024 ? `${n} B` : `${(n / 1024).toFixed(1)} kB`);
+  const when = (s) => (s ? esc(String(s).slice(0, 16).replace("T", " ")) : "-");
+  const label = (f) => f.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+  // The order the columns sit in *this* book, which is the order worth reading them in.
+  const ordered = (letters) =>
+    Object.keys(letters).sort((a, b) => (letters[a].length - letters[b].length) || letters[a].localeCompare(letters[b]));
+
+  function drawState() {
+    if (!book.is_readable) {
+      stateBox.innerHTML = `<div class="warning">${esc(book.problem)}</div>`;
+      return;
+    }
+    const letters = book.letters;
+    const unknown = Object.entries(book.unknown_headers);
+    stateBox.innerHTML = `
+      <div class="panel"><table><tbody>
+        <tr><td>File</td><td class="mono">${esc(book.filename)} <span class="muted">(${size(book.byte_count)})</span></td></tr>
+        <tr><td>Data sheet</td><td class="mono">${esc(book.sheet_name)}</td>
+          <td class="muted">found by its header row, not by position</td></tr>
+        <tr><td>Rows already in it</td><td>${book.row_count}</td></tr>
+      </tbody></table></div>
+
+      <h2>Where the columns actually are</h2>
+      <p class="muted">The brief describes 21 columns, A to U. This book has ${Object.keys(letters).length + unknown.length}.
+        Every letter below was resolved from the header text in the file, and the formulas are
+        written from these — not from the letters in the brief.</p>
+      <div class="panel"><table>
+        <thead><tr><th>Column</th><th>Header</th><th>Kind</th></tr></thead>
+        <tbody>${ordered(letters).map((f) => `<tr>
+          <td class="mono">${esc(letters[f])}</td>
+          <td>${esc(label(f))}</td>
+          <td class="muted">${current && current.formula_columns.includes(f)
+            ? '<span class="tag">formula &mdash; the operator\\'s</span>'
+            : current && current.never_written.includes(f)
+              ? '<span class="tag">never written</span>'
+              : "written"}</td>
+        </tr>`).join("")}
+        ${unknown.map(([name, index]) => `<tr>
+          <td class="mono">${esc(String.fromCharCode(64 + index))}</td>
+          <td>${esc(name)}</td>
+          <td class="muted"><span class="tag">not ours</span> left exactly as it is</td>
+        </tr>`).join("")}
+        </tbody>
+      </table></div>`;
+  }
+
+  function drawReady() {
+    const done = book.appended_rounds.length ? `
+      <h2>Already in the book</h2>
+      <div class="panel"><table>
+        <thead><tr><th>Round</th><th>Rows</th><th>When</th><th>By</th></tr></thead>
+        <tbody>${book.appended_rounds.map((r) => `<tr>
+          <td class="mono">#${r.round_id}</td>
+          <td class="mono">${r.first_row}&ndash;${r.last_row}</td>
+          <td class="muted">${when(r.appended_at)}</td>
+          <td class="muted">${esc(r.appended_by || "-")}</td></tr>`).join("")}</tbody>
+      </table></div>` : "";
+
+    readyBox.innerHTML = `
+      <h2>Ready to append <span class="muted">(${book.ready_rounds.length})</span></h2>
+      ${book.ready_rounds.length
+        ? `<div class="panel"><table>
+             <thead><tr><th>Round</th><th>Queue closed</th><th>By</th><th></th></tr></thead>
+             <tbody>${book.ready_rounds.map((r) => `<tr>
+               <td class="mono">#${r.round_id}</td>
+               <td class="muted">${when(r.resolved_at)}</td>
+               <td class="muted">${esc(r.resolved_by || "-")}</td>
+               <td><button class="link" data-preview="${r.round_id}">See what would be written</button></td>
+             </tr>`).join("")}</tbody>
+           </table></div>`
+        : `<p class="muted">No round is waiting. A round reaches here once every question in its
+             queue is answered and the queue is closed.</p>`}
+      ${done}`;
+
+    readyBox.querySelectorAll("[data-preview]").forEach((b) =>
+      b.addEventListener("click", () => show(b.dataset.preview)));
+  }
+
+  async function show(id) {
+    try {
+      current = await json("GET", `/api/rounds/${id}/append`);
+      drawPreview();
+      drawState();
+      previewBox.hidden = false;
+      previewBox.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (e) { window.alert(e.message); }
+  }
+
+  function drawPreview() {
+    const d = current;
+    const letters = d.letters;
+    const columns = ordered(letters);
+    const explained = d.rows.filter((r) => r.why);
+
+    previewBox.innerHTML = `
+      <h2>Round #${d.round_id} &mdash; ${d.rows.length} row(s), starting at row ${d.first_row}</h2>
+      ${d.refusals.length
+        ? `<div class="warning">${d.refusals.map(esc).join("<br>")}</div>`
+        : `<div class="notice">Nothing has been written. This is what would be.</div>`}
+
+      <div class="panel" style="overflow-x:auto"><table>
+        <thead><tr><th>Row</th>${columns.map((f) => `<th class="mono" title="${esc(label(f))}">${esc(letters[f])}</th>`).join("")}</tr></thead>
+        <tbody>${d.rows.map((r) => `<tr>
+          <td class="mono muted">${esc(r.row_number)}</td>
+          ${columns.map((f) => `<td class="${d.formula_columns.includes(f) ? "mono muted" : ""}"
+            style="white-space:nowrap">${esc(r.cells[f] || "")}</td>`).join("")}
+        </tr>`).join("")}</tbody>
+      </table></div>
+      <p class="muted">The grey cells are formulas written for the new row number. The empty ones in
+        the NOTES column are the operator's own margin, left alone.</p>
+
+      ${explained.length ? `
+        <h3>Cells left blank on purpose <span class="muted">(${explained.length})</span></h3>
+        <p class="muted">A blank that nobody explained is indistinguishable from one nobody got to.</p>
+        ${explained.map((r) => `<div class="panel">
+          <strong class="mono">${esc(r.delivery_id)} &middot; ${esc(r.account_sale)}</strong>
+          <span class="muted">${esc(r.product)}</span>
+          <p class="muted" style="margin:.3rem 0 0">${esc(r.why)}</p>
+        </div>`).join("")}` : ""}
+
+      ${d.appended_at ? `
+        <div class="notice">Appended ${when(d.appended_at)} by ${esc(d.appended_by || "?")},
+          rows ${esc(d.appended_rows)}. The version before it was saved as
+          <span class="mono">${esc(d.saved_as || "")}</span>.</div>`
+        : `<div class="panel">
+            <button data-append="${d.round_id}" ${d.is_writable ? "" : "disabled"}>
+              Append ${d.rows.length} row(s) to the book
+            </button>
+            <p class="muted" style="font-size:.9em;margin:.5rem 0 0">
+              The book is copied aside first, in the same step. If the write fails, the copy goes
+              back and the round stays waiting &mdash; there is no half-written state to land in.
+            </p>
+          </div>`}`;
+
+    const button = previewBox.querySelector("[data-append]");
+    if (button) button.addEventListener("click", async () => {
+      button.disabled = true;
+      try {
+        current = await json("POST", `/api/rounds/${button.dataset.append}/append`);
+        book = await json("GET", "/api/workbook");
+        drawPreview(); drawState(); drawReady(); drawVersions();
+      } catch (e) { window.alert(e.message); button.disabled = false; }
+    });
+  }
+
+  function drawVersions() {
+    versionsBox.innerHTML = `
+      <h2>Saved versions <span class="muted">(${book.versions.length})</span></h2>
+      <p class="muted">One is taken as a step inside every append, so the book before it is always
+        recoverable. Rolling back saves the current version first, which is what makes a rollback
+        itself undoable.</p>
+      <p><a href="/api/workbook/download">Download the book as it stands</a></p>
+      ${book.versions.length ? `<div class="panel"><table>
+        <thead><tr><th>Taken</th><th>Why</th><th class="num">Size</th><th></th></tr></thead>
+        <tbody>${book.versions.map((v, i) => `
+          <tr>
+            <td class="muted">${when(v.taken_at)}</td>
+            <td>${esc(v.label || "-")}</td>
+            <td class="num muted">${size(v.byte_count)}</td>
+            <td><button class="link" data-reveal="ver-${i}">Roll back to this</button></td>
+          </tr>
+          <tr id="ver-${i}" hidden><td colspan="4">
+            <label for="ver-${i}-why">Why is the book being rolled back? (required)</label>
+            <input id="ver-${i}-why" type="text" placeholder="e.g. round 4 was appended against the wrong producer">
+            <button data-restore="${esc(v.name)}" data-why="ver-${i}-why">Put this version back</button>
+          </td></tr>`).join("")}</tbody>
+      </table></div>` : `<p class="muted">No versions kept yet. The first append takes one.</p>`}`;
+
+    versionsBox.querySelectorAll("[data-reveal]").forEach((b) => b.addEventListener("click", () => {
+      const row = document.getElementById(b.dataset.reveal);
+      if (row) row.hidden = !row.hidden;
+    }));
+    versionsBox.querySelectorAll("[data-restore]").forEach((b) => b.addEventListener("click", async () => {
+      const why = (document.getElementById(b.dataset.why)?.value || "").trim();
+      try {
+        book = await json("POST", `/api/workbook/versions/${encodeURIComponent(b.dataset.restore)}/restore`, { reason: why });
+        current = null;
+        previewBox.hidden = true;
+        drawState(); drawReady(); drawVersions();
+      } catch (e) { window.alert(e.message); }
+    }));
+  }
+
+  (async () => {
+    book = await json("GET", "/api/workbook");
+    drawState(); drawReady(); drawVersions();
+  })();
+})();
+</script>
+{% endblock %}

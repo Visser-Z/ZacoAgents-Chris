@@ -23,6 +23,7 @@ from zaco.api import (
     routes_ingest,
     routes_queue,
     routes_rounds,
+    routes_workbook,
 )
 from zaco.auth.service import seed_admin
 from zaco.config import get_settings
@@ -118,6 +119,8 @@ def create_app() -> FastAPI:
     # `/api/rounds/{round_id}` pattern that routes_queue registers on the same prefix.
     app.include_router(routes_rounds.router)
     app.include_router(routes_queue.router)
+    app.include_router(routes_workbook.router)
+    app.include_router(routes_workbook.rounds)
     app.include_router(routes_queue.products)
     app.include_router(web_routes.router)
 

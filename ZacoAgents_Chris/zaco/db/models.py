@@ -99,7 +99,10 @@ class RoundStatus(StrEnum):
     """Documents saved, queue open. Nothing may be appended."""
 
     RESOLVED = "resolved"
-    """Every question answered. Ready for the workbook (Phase 4)."""
+    """Every question answered. Ready for the workbook."""
+
+    APPENDED = "appended"
+    """Written into the operator's book. Rows are appended, never rebuilt, so this is final."""
 
     ABANDONED = "abandoned"
     """Put aside without being appended. Kept, because deleting it hides that it happened."""
@@ -125,6 +128,12 @@ class Round(Base):
     created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), default=None)
     resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
     resolved_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), default=None)
+    appended_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    appended_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), default=None)
+    appended_first_row: Mapped[int | None] = mapped_column(Integer, default=None)
+    appended_last_row: Mapped[int | None] = mapped_column(Integer, default=None)
+    """Which rows of the book this round wrote. An append cannot be unwritten, so this is the
+    record that stops a round being appended twice and tells an operator where to look."""
 
     documents: Mapped[list[RoundDocument]] = relationship(
         back_populates="round",
@@ -139,6 +148,7 @@ class Round(Base):
     )
     created_by: Mapped[User | None] = relationship(foreign_keys=[created_by_id])
     resolved_by: Mapped[User | None] = relationship(foreign_keys=[resolved_by_id])
+    appended_by: Mapped[User | None] = relationship(foreign_keys=[appended_by_id])
 
 
 class RoundDocument(Base):
@@ -196,6 +206,8 @@ class RoundAction(StrEnum):
     REOPENED = "round_reopened"
     ABANDONED = "round_abandoned"
     DN_RELEASED = "delivery_note_released"
+    APPENDED = "workbook_appended"
+    ROLLED_BACK = "workbook_rolled_back"
 
 
 class RoundEvent(Base):
