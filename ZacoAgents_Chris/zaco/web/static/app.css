@@ -136,16 +136,33 @@ code, .mono { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; f
 /* --- The workbook grid ----------------------------------------------------------------------
    A preview of rows about to be written into a 23-column spreadsheet. It has to read like the
    spreadsheet it is going into, which means the column letters visible, the row numbers the
-   rows will actually take, and both staying put while the operator scrolls sideways. */
+   rows will actually take, and both staying put while the operator scrolls sideways.
+
+   The colour is not decoration. Across 23 columns the operator needs to see, at a glance, which
+   cells this system writes, which hold the operator's own formulas, and which it never touches
+   at all -- so each of those three is its own colour, and the legend names them. Row banding and
+   a hover band exist because tracking one row from column A to column V without them is how a
+   figure gets read off the wrong line. */
 
 main.wide { max-width: none; }
 
 .grid-wrap {
+  --grid-line: #dbe2e0;
+  --grid-line-strong: #adc0bb;
+  --grid-head: #17564a;
+  --grid-head-ink: #f1f7f5;
+  --grid-head-letter: #8cc3b5;
+  --grid-gutter: #dde8e4;
+  --grid-gutter-ink: #4a5654;
+  --formula-ink: #2f5680;
+  --blocked-edge: #cf8f1e;
+
   overflow: auto;
   max-height: 70vh;
-  border: 1px solid var(--line);
+  border: 1px solid var(--grid-line-strong);
   border-radius: 6px;
   background: var(--panel);
+  box-shadow: 0 1px 3px rgba(23, 86, 74, 0.08), 0 6px 18px rgba(23, 86, 74, 0.05);
 }
 
 table.grid {
@@ -157,26 +174,55 @@ table.grid {
 
 table.grid th,
 table.grid td {
-  border-bottom: 1px solid var(--line);
-  border-right: 1px solid var(--line);
+  border-bottom: 1px solid var(--grid-line);
+  border-right: 1px solid var(--grid-line);
   padding: 0.35rem 0.55rem;
   vertical-align: middle;
-  background: var(--panel);
 }
 
+/* The column headings, as a spreadsheet draws them: the letter first, the book's own header
+   text after it. Solid rather than tinted, so the grid stops dissolving into the page. */
 table.grid thead th {
   position: sticky;
   top: 0;
   z-index: 2;
-  background: var(--bg);
+  background: var(--grid-head);
+  color: var(--grid-head-ink);
   text-transform: none;
   letter-spacing: 0;
   font-size: 0.82em;
   line-height: 1.25;
-  border-bottom: 2px solid var(--line);
+  border-right-color: rgba(255, 255, 255, 0.16);
+  border-bottom: 1px solid var(--grid-head);
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, 0.18);
 }
-table.grid thead th .letter { color: var(--accent); font-weight: 700; margin-right: 0.35em; }
-table.grid thead th .header { color: var(--muted); text-transform: uppercase; }
+table.grid thead th .letter { color: var(--grid-head-letter); font-weight: 700; margin-right: 0.35em; }
+table.grid thead th .header { color: var(--grid-head-ink); text-transform: uppercase; font-weight: 600; }
+
+/* Each row names its own cell colours, so banding, the blocked tint and the hover band all
+   reach the formula and never-written cells too, instead of stopping at the plain ones. */
+table.grid tbody tr {
+  --cell-bg: var(--panel);
+  --cell-formula-bg: #eef4fb;
+  --cell-gutter-bg: var(--grid-gutter);
+}
+table.grid tbody tr:nth-child(even) {
+  --cell-bg: #f2f7f6;
+  --cell-formula-bg: #e5eef8;
+  --cell-gutter-bg: #d4e2dd;
+}
+table.grid tbody tr.blocked {
+  --cell-bg: #fdf6ea;
+  --cell-formula-bg: #f7f0e6;
+  --cell-gutter-bg: #f6e4c4;
+}
+table.grid tbody tr:hover {
+  --cell-bg: #e4f0ec;
+  --cell-formula-bg: #dae8f5;
+  --cell-gutter-bg: #d3e3dd;
+}
+
+table.grid tbody td { background: var(--cell-bg); }
 
 /* The row number stays put, because a cell in column S means nothing without its row. */
 table.grid th.rownum,
@@ -184,34 +230,95 @@ table.grid td.rownum {
   position: sticky;
   left: 0;
   z-index: 1;
-  background: var(--bg);
-  color: var(--muted);
+  color: var(--grid-gutter-ink);
   font-variant-numeric: tabular-nums;
+  font-weight: 600;
   text-align: right;
-  border-right: 2px solid var(--line);
+  border-right: 1px solid var(--grid-line-strong);
 }
-table.grid thead th.rownum { z-index: 3; }
+table.grid tbody td.rownum { background: var(--cell-gutter-bg); }
+table.grid thead th.rownum { z-index: 3; background: var(--grid-head); }
 
 table.grid td.num { text-align: right; font-variant-numeric: tabular-nums; }
-table.grid td.formula { color: var(--muted); font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
-table.grid td.theirs { background: repeating-linear-gradient(45deg, #fafafa, #fafafa 4px, #f2f3f3 4px, #f2f3f3 8px); }
-table.grid tr.blocked td.rownum { background: var(--warn-bg); color: var(--warn-ink); }
+
+/* Blue and monospaced: a formula the operator owns, not a figure this system computed. */
+table.grid tbody td.formula {
+  background: var(--cell-formula-bg);
+  color: var(--formula-ink);
+  font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+
+/* Hatched: not ours at all. The append leaves these exactly as it found them. */
+table.grid tbody td.theirs {
+  background: repeating-linear-gradient(45deg, #eff1f0, #eff1f0 4px, #e2e6e4 4px, #e2e6e4 8px);
+}
+
+/* A row that cannot be written carries an amber edge on its gutter, which survives the hover
+   band -- a warning that disappears under the pointer is not a warning. */
+table.grid tbody tr.blocked td.rownum {
+  color: var(--warn-ink);
+  box-shadow: inset 3px 0 0 var(--blocked-edge);
+}
 
 .chip {
   display: inline-block;
   font-size: 0.78em;
   text-transform: uppercase;
   letter-spacing: 0.02em;
-  border: 1px dashed var(--line);
+  border: 1px dashed #a9b6b3;
   border-radius: 3px;
   padding: 0.05em 0.4em;
   color: var(--muted);
+  background: rgba(255, 255, 255, 0.6);
   white-space: nowrap;
 }
-.chip.stops { border-color: var(--warn-line); color: var(--warn-ink); background: var(--warn-bg); }
+.chip.stops {
+  border-style: solid;
+  border-color: var(--warn-line);
+  color: var(--warn-ink);
+  background: var(--warn-bg);
+  font-weight: 600;
+}
 
-.legend { display: flex; flex-wrap: wrap; gap: 0.35rem 1rem; margin: 0.5rem 0 1.25rem; font-size: 0.88em; color: var(--muted); }
-.legend span { display: inline-flex; align-items: center; gap: 0.35rem; }
-.legend .swatch { width: 1.1rem; height: 0.85rem; border: 1px solid var(--line); border-radius: 2px; display: inline-block; }
-.legend .swatch.formula { background: #fff; }
-.legend .swatch.theirs { background: repeating-linear-gradient(45deg, #fafafa, #fafafa 4px, #f2f3f3 4px, #f2f3f3 8px); }
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem 1.25rem;
+  margin: 0.6rem 0 1.25rem;
+  padding: 0.6rem 0.85rem;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-size: 0.88em;
+  color: var(--muted);
+}
+.legend span { display: inline-flex; align-items: center; gap: 0.4rem; }
+.legend .swatch {
+  width: 1.1rem;
+  height: 0.85rem;
+  border: 1px solid #adc0bb;
+  border-radius: 2px;
+  display: inline-block;
+  flex: none;
+}
+.legend .swatch.written { background: #ffffff; }
+.legend .swatch.formula { background: #eef4fb; border-color: #9db6d1; }
+.legend .swatch.theirs { background: repeating-linear-gradient(45deg, #eff1f0, #eff1f0 4px, #e2e6e4 4px, #e2e6e4 8px); }
+.legend .swatch.blocked { background: #fdf6ea; border-color: #cf8f1e; box-shadow: inset 3px 0 0 #cf8f1e; }
+
+/* An appended round held against the file. Green says the book still has what the record
+   claims; amber says it does not, and the finding sits directly beneath the row it is about. */
+.chip.agrees {
+  border-style: solid;
+  border-color: #8fbfae;
+  color: #16584a;
+  background: #eaf4f0;
+  font-weight: 600;
+}
+td.finding {
+  color: var(--warn-ink);
+  background: var(--warn-bg);
+  border-left: 3px solid var(--warn-line);
+  font-size: 0.93em;
+  white-space: normal;
+}
