@@ -425,13 +425,22 @@ class SnapshotOut(BaseModel):
 
 
 class AppendedRowOut(BaseModel):
-    """Which rows of the book one round wrote."""
+    """Which rows of the book one round wrote, and whether the book still holds them."""
 
     round_id: int
     first_row: int
     last_row: int
     appended_at: datetime | None = None
     appended_by: str | None = None
+
+    agrees: bool = True
+    """False when the file no longer holds what the record says this round wrote."""
+
+    finding: str | None = None
+    """What differs, in plain words. Only set when `agrees` is false."""
+
+    checked: str = ""
+    """What the comparison looked at, and what it therefore could not see. Always shown."""
 
 
 class ReadyRoundOut(BaseModel):

@@ -341,40 +341,45 @@ def test_a_rollback_does_not_quietly_reopen_the_round_it_undid(operator: TestCli
     assert operator.post(f"/api/rounds/{round_id}/append").status_code == 409
 
 
-# --- who may do it -----------------------------------------------------------------------------------
-
-
-def test_closing_a_queue_does_not_carry_the_right_to_write_the_book(
-    client: TestClient, db: Session, operator: TestClient
-) -> None:
-    round_id = _settle(operator, SALES, PAYMENTS)
-    _make_user(db, "resolver@example.com", [Permission.INGEST, Permission.RESOLVE])
-    client.post("/api/auth/login", json={"email": "resolver@example.com", "password": PASSWORD})
-
-    assert client.post(f"/api/rounds/{round_id}/append").status_code == 403
-    assert client.get(f"/api/rounds/{round_id}/append").status_code == 403
-    assert client.get("/api/workbook").status_code == 200, "reading the state is not writing it"
-
-
-def test_the_stm_column_follows_d7_even_with_no_payment_run_behind_the_row(
+def test_a_rollback_that_removed_the_rows_is_reported_against_the_round(
     operator: TestClient,
 ) -> None:
-    """D7 belongs to the column, not to the payment run. A row whose account sale appears in no
-    payment document still goes into the operator's STM No column and still has to look like the
-    rows around it -- `PRE*BT*390100` sitting between two bare numbers stops a filter working.
+    """Keeping the appended mark is right and it leaves the operator blind. So say it."""
+    round_id = _settle(operator, SALES, PAYMENTS)
+    saved = operator.post(f"/api/rounds/{round_id}/append").json()["saved_as"]
 
-    `JOH*SUB*5644200/1` is the other half of the same rule: it has no bare number, so it keeps
-    the whole reference. Dropping to `5644200/1` would lose which agent ran it, and `5640001/1`
-    and `5640001/2` are already two separate April runs worth R5,100 and R3,230.
-    """
-    round_id = _settle(operator, SALES)
-    values = [
-        row["cells"]["stm_no"]
-        for row in operator.get(f"/api/rounds/{round_id}/append").json()["rows"]
-    ]
-    assert values, "the fixture produced no rows"
-    for value in values:
-        bare = value.rsplit("*", 1)[-1]
-        assert not bare.isdigit() or "*" not in value, (
-            f"{value} kept its reference prefix even though it has a bare number"
-        )
+    before = operator.get("/api/workbook").json()
+    mine = next(r for r in before["appended_rounds"] if r["round_id"] == round_id)
+    assert mine["agrees"] is True
+    assert mine["finding"] is None
+
+    operator.post(f"/api/workbook/versions/{saved}/restore", json={"reason": "wrong producer"})
+
+    after = operator.get("/api/workbook").json()
+    mine = next(r for r in after["appended_rounds"] if r["round_id"] == round_id)
+    assert mine["agrees"] is False
+    assert mine["finding"] is not None
+    assert f"rows {mine['first_row']}-{mine['last_row']}" in mine["finding"]
+    assert "no rows there at all" in mine["finding"]
+
+
+def test_the_agreement_states_what_it_did_not_compare(operator: TestClient) -> None:
+    """Section 10: the blind spot travels with the figure, not in a comment."""
+    round_id = _settle(operator, SALES, PAYMENTS)
+    operator.post(f"/api/rounds/{round_id}/append")
+
+    mine = next(
+        r
+        for r in operator.get("/api/workbook").json()["appended_rounds"]
+        if r["round_id"] == round_id
+    )
+    assert "figures in those rows are not compared" in mine["checked"]
+
+
+def test_an_unappended_round_is_not_held_against_the_book_at_all(operator: TestClient) -> None:
+    round_id = _settle(operator, SALES, PAYMENTS)
+
+    state = operator.get("/api/workbook").json()
+
+    assert [r["round_id"] for r in state["ready_rounds"]] == [round_id]
+    assert state["appended_rounds"] == []

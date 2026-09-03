@@ -67,18 +67,34 @@
   }
 
   function drawReady() {
+    // A rollback restores the file and deliberately leaves the round's appended mark alone, so
+    // the record can go on claiming rows the book no longer has. Say which, rather than leaving
+    // the operator to notice.
+    const off = book.appended_rounds.filter((r) => !r.agrees);
+    const checked = book.appended_rounds.length
+      ? (book.appended_rounds.find((r) => r.checked) || {}).checked || "" : "";
+
     const done = book.appended_rounds.length ? `
       <h2>Already in the book</h2>
+      ${off.length ? `<div class="warning"><strong>${off.length} of
+        ${book.appended_rounds.length} appended round(s) no longer match the book.</strong>
+        Nothing has been changed on either side &mdash; this is only what the two now say.</div>` : ""}
       <div class="panel"><table>
-        <thead><tr><th>Round</th><th>Rows</th><th>When</th><th>By</th><th></th></tr></thead>
+        <thead><tr><th>Round</th><th>Rows</th><th>When</th><th>By</th><th>Still in the book</th><th></th></tr></thead>
         <tbody>${book.appended_rounds.map((r) => `<tr>
           <td class="mono">#${r.round_id}</td>
           <td class="mono">${r.first_row}&ndash;${r.last_row}</td>
           <td class="muted">${when(r.appended_at)}</td>
           <td class="muted">${esc(r.appended_by || "-")}</td>
+          <td>${r.agrees
+            ? '<span class="chip agrees">matches</span>'
+            : '<span class="chip stops">does not match</span>'}</td>
           <td><button class="link" data-preview="${r.round_id}">See what was written</button></td>
-          </tr>`).join("")}</tbody>
-      </table></div>` : "";
+          </tr>
+          ${r.agrees ? "" : `<tr><td></td><td colspan="5" class="finding">${esc(r.finding || "")}</td></tr>`}`).join("")}</tbody>
+      </table>
+      ${checked ? `<p class="muted" style="font-size:.9em;margin:.75rem 0 0">${esc(checked)}</p>` : ""}
+      </div>` : "";
 
     readyBox.innerHTML = `
       <h2>Rounds <span class="muted">(${book.ready_rounds.length} ready)</span></h2>

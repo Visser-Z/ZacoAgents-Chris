@@ -8,6 +8,8 @@ hid that would hide the one thing worth checking.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 from sqlalchemy import select
@@ -28,9 +30,15 @@ from zaco.auth.permissions import Permission
 from zaco.db.base import get_db
 from zaco.db.models import Round, RoundAction, RoundStatus, User, utcnow
 from zaco.resolve import service
+from zaco.workbook import agreement, snapshot
 from zaco.workbook import append as appender
-from zaco.workbook import snapshot
-from zaco.workbook.locate import SheetLayout, WorkbookShapeError, locate, read_rows
+from zaco.workbook.locate import (
+    BookRow,
+    SheetLayout,
+    WorkbookShapeError,
+    locate,
+    read_rows,
+)
 
 router = APIRouter(prefix="/api/workbook", tags=["workbook"])
 rounds = APIRouter(prefix="/api/rounds", tags=["workbook"])
@@ -110,12 +118,14 @@ def state(db: Session = Depends(get_db), _: User = Depends(current_user)) -> Wor
         .scalars()
         .all()
     )
+    in_book = read_rows(path, layout)
+    agreements = _agreements(db, appended, in_book)
     return WorkbookStateOut(
         filename=path.name,
         is_readable=True,
         sheet_name=layout.sheet_name,
         header_row=layout.header_row,
-        row_count=len(read_rows(path, layout)),
+        row_count=len(in_book),
         letters={name: layout.letter(name) or "" for name in _order(layout)},
         headers={name: layout.headers.get(name, name) for name in _order(layout)},
         order=_order(layout),
@@ -130,10 +140,81 @@ def state(db: Session = Depends(get_db), _: User = Depends(current_user)) -> Wor
                 last_row=r.appended_last_row or 0,
                 appended_at=r.appended_at,
                 appended_by=r.appended_by.email if r.appended_by else None,
+                agrees=agreements[r.id].agrees,
+                finding=agreements[r.id].finding,
+                checked=agreements[r.id].checked,
             )
             for r in appended
         ],
     )
+
+
+def _agreements(
+    db: Session, appended: Sequence[Round], in_book: list[BookRow]
+) -> dict[int, agreement.Agreement]:
+    """Hold every appended round's claim against the file, and against the other claims.
+
+    Re-derived rather than stored, per S1: the documents are the durable record and everything
+    else is worked out from them on read. That costs about 40ms a round and means a corrected
+    reader shows up here as a difference rather than hiding behind a figure written weeks ago.
+    """
+    spans = {
+        r.id: (r.appended_first_row, r.appended_last_row)
+        for r in appended
+        if r.appended_first_row is not None and r.appended_last_row is not None
+    }
+    clashes = agreement.contested(spans)
+
+    found: dict[int, agreement.Agreement] = {}
+    for round_ in appended:
+        first = round_.appended_first_row
+        if first is None:
+            found[round_.id] = agreement.Agreement(
+                agrees=False,
+                finding=(
+                    "This round is marked as appended but the record does not say which rows it "
+                    "wrote, so nothing can be held against the file."
+                ),
+            )
+            continue
+        try:
+            built = appender.plan(service.load(db, round_))
+        except Exception as failure:  # noqa: BLE001 -- a broken round must not blank the page
+            found[round_.id] = agreement.Agreement(
+                agrees=False,
+                finding=(
+                    f"This round cannot be re-derived from its documents ({failure}), so what it "
+                    f"wrote cannot be compared with what the book now holds."
+                ),
+            )
+            continue
+        claims = [
+            agreement.RowClaim(
+                row_number=first + offset,
+                dn=_as_text(planned.values.get("dn")),
+                stm_no=_as_text(planned.values.get("stm_no")),
+                description=_as_text(planned.values.get("description")),
+            )
+            for offset, planned in enumerate(built.rows)
+        ]
+        result = agreement.compare(claims, in_book)
+        if round_.id in clashes:
+            result = agreement.Agreement(
+                agrees=False,
+                finding=" ".join(filter(None, [clashes[round_.id], result.finding])),
+                checked=result.checked,
+            )
+        found[round_.id] = result
+    return found
+
+
+def _as_text(value: object) -> str | None:
+    """The same reading `read_rows` gives a cell, so the two sides compare like with like."""
+    if value is None:
+        return None
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
 
 
 @router.get("/download", response_class=FileResponse)
