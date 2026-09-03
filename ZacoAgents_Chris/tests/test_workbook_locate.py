@@ -110,3 +110,59 @@ def test_a_missing_book_is_reported_rather_than_being_an_error() -> None:
     assert knowledge.is_readable is False
     assert knowledge.links == {}
     assert "cannot be reused" in (knowledge.problem or "")
+
+
+# --- reading the whole row, for drawing the book ------------------------------------------------
+
+
+def test_the_rows_come_back_narrow_unless_the_whole_row_is_asked_for() -> None:
+    """The DN join wants three fields. It should not pay for a second pass over the file."""
+    rows = read_rows(LIVE)
+
+    assert rows
+    assert all(row.cells == {} and row.formulas == {} for row in rows)
+
+
+def test_asking_for_the_whole_row_gives_every_column_keyed_by_its_letter() -> None:
+    rows = read_rows(LIVE, with_cells=True)
+    first = rows[0]
+
+    assert first.cells["A"] == "14690"
+    assert first.cells["B"] == "Farmers Trust"
+    assert first.cells["F"] == "381900"
+    assert first.cells["G"] == "Imp Cherries 5kg"
+
+
+def test_the_operators_own_columns_come_back_too() -> None:
+    """`NOTES` at W is never written and is exactly what the operator opens the book to read."""
+    rows = read_rows(LIVE, with_cells=True)
+
+    assert any(row.cells.get("W") for row in rows)
+
+
+def test_a_formula_cell_carries_its_formula_and_shows_it() -> None:
+    """openpyxl does not calculate, so an uncached formula must not read as an empty cell."""
+    rows = read_rows(LIVE, with_cells=True)
+    first = rows[0]
+
+    assert first.formulas["L"] == f"=I{first.row_number}-K{first.row_number}"
+    assert first.cells["L"] == first.formulas["L"]
+
+
+def test_a_cell_that_is_genuinely_empty_stays_out_of_the_row() -> None:
+    layout = locate(LIVE)
+    rows = read_rows(LIVE, layout, with_cells=True)
+
+    every = {letter for row in rows for letter in row.cells}
+    assert "A" in every
+    assert all(value != "" for row in rows for value in row.cells.values())
+
+
+def test_the_narrow_fields_are_unchanged_by_asking_for_the_whole_row() -> None:
+    """`resolve/book.py` reads these, so widening the row must not move them."""
+    narrow = read_rows(LIVE)
+    wide = read_rows(LIVE, with_cells=True)
+
+    assert [(r.row_number, r.dn, r.stm_no, r.description) for r in narrow] == [
+        (r.row_number, r.dn, r.stm_no, r.description) for r in wide
+    ]

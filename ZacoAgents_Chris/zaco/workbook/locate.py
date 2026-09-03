@@ -16,6 +16,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from dataclasses import field as dc_field
+from datetime import date, datetime, time
 from pathlib import Path
 from typing import Any
 
@@ -165,6 +166,23 @@ class BookRow:
     description: str | None
     date: object | None
 
+    cells: dict[str, str] = dc_field(default_factory=dict)
+    """Every column of the row as it reads on screen, keyed by **column letter**.
+
+    By letter and not by field name because the operator's own columns -- `Buyer note`,
+    `Packhouse`, `NOTES` -- have no field name at all, and they are as much a part of the row as
+    the ones this system knows. Only filled when `read_rows` is asked for it.
+    """
+
+    formulas: dict[str, str] = dc_field(default_factory=dict)
+    """The formula behind a cell, where there is one, keyed by column letter.
+
+    A spreadsheet cell holds a formula *and* the result Excel cached the last time it saved.
+    openpyxl does not calculate, so a row this system appended and Excel has not yet opened has
+    a formula and no cached result. Keeping both means such a row can show its formula rather
+    than an empty cell, and can be told apart from one that is genuinely blank.
+    """
+
 
 def _text(value: object) -> str | None:
     """Read a cell as text without caring what type it was stored as.
@@ -181,10 +199,45 @@ def _text(value: object) -> str | None:
     return text or None
 
 
-def read_rows(path: Path, layout: SheetLayout | None = None) -> list[BookRow]:
-    """The existing rows, for the DN join and the series. Formulas are not evaluated."""
+def _show(value: object) -> str:
+    """A cell as the operator would read it, not as Python happens to hold it."""
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        return value.date().isoformat() if value.time() == time.min else value.isoformat(" ")
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, float) and value.is_integer():
+        return str(int(value))
+    return str(value)
+
+
+def read_rows(
+    path: Path, layout: SheetLayout | None = None, *, with_cells: bool = False
+) -> list[BookRow]:
+    """The existing rows, for the DN join and the series. Formulas are not evaluated.
+
+    `with_cells` additionally reads every column of every row, for drawing the book on screen.
+    It costs a second pass over the file -- once for what Excel last calculated and once for the
+    formulas behind it -- so the callers that only want delivery notes do not pay for it.
+    """
     layout = layout or locate(path)
     workbook = load_workbook(path, data_only=True, read_only=True)
+    written: dict[int, list[Any]] = {}
+    if with_cells:
+        formulas = load_workbook(path, data_only=False, read_only=True)
+        try:
+            written = {
+                number: list(row)
+                for number, row in enumerate(
+                    formulas[layout.sheet_name].iter_rows(
+                        min_row=layout.first_data_row, values_only=True
+                    ),
+                    start=layout.first_data_row,
+                )
+            }
+        finally:
+            formulas.close()
     try:
         sheet = workbook[layout.sheet_name]
         rows: list[BookRow] = []
@@ -207,8 +260,42 @@ def read_rows(path: Path, layout: SheetLayout | None = None) -> list[BookRow]:
                     stm_no=_text(cell("stm_no")),
                     description=_text(cell("description")),
                     date=cell("date"),
+                    cells=_by_letter(cells, written.get(row_number, [])),
+                    formulas=_formulas_by_letter(written.get(row_number, [])),
                 )
             )
         return rows
     finally:
         workbook.close()
+
+
+def _is_formula(value: object) -> bool:
+    return isinstance(value, str) and value.startswith("=")
+
+
+def _by_letter(calculated: list[Any], written: list[Any]) -> dict[str, str]:
+    """What each cell shows: the value Excel cached, or the formula when it cached none.
+
+    A row this system appended and nobody has opened in Excel yet has formulas and no cached
+    results at all. Showing its formula is truer than showing it empty, and it is the same thing
+    the append preview shows for the same cells.
+    """
+    if not written:
+        return {}
+    out: dict[str, str] = {}
+    for offset in range(max(len(calculated), len(written))):
+        value = calculated[offset] if offset < len(calculated) else None
+        if value is None and offset < len(written):
+            value = written[offset]
+        text = _show(value)
+        if text:
+            out[get_column_letter(offset + 1)] = text
+    return out
+
+
+def _formulas_by_letter(written: list[Any]) -> dict[str, str]:
+    return {
+        get_column_letter(offset + 1): value
+        for offset, value in enumerate(written)
+        if _is_formula(value)
+    }
