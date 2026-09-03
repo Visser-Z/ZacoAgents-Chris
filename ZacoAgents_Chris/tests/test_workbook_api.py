@@ -423,6 +423,49 @@ def test_an_appended_round_names_the_copy_taken_before_it(operator: TestClient) 
     assert again["saved_as"]
 
 
+# --- the book on screen -------------------------------------------------------------------------
+
+
+def test_the_state_carries_the_book_s_own_rows(operator: TestClient) -> None:
+    """The page draws the operator's file, not a summary of it."""
+    state = operator.get("/api/workbook").json()
+
+    assert state["row_count"] == len(state["rows"])
+    assert state["rows_from"] == state["rows"][0]["row_number"]
+    assert state["rows"][0]["cells"]["A"] == "14690"
+
+
+def test_the_rows_carry_the_operators_own_columns(operator: TestClient) -> None:
+    """`NOTES` is never written, and is the first thing the operator looks for."""
+    state = operator.get("/api/workbook").json()
+
+    assert "notes" in state["never_written"]
+    assert any(row["cells"].get("W") for row in state["rows"])
+
+
+def test_a_formula_in_the_book_arrives_as_a_formula(operator: TestClient) -> None:
+    state = operator.get("/api/workbook").json()
+    first = state["rows"][0]
+
+    assert first["formulas"]["L"].startswith("=")
+    assert first["cells"]["L"] == first["formulas"]["L"]
+
+
+def test_appended_rows_join_the_book_and_are_drawn_with_it(operator: TestClient) -> None:
+    before = operator.get("/api/workbook").json()
+    round_id = _settle(operator, SALES, PAYMENTS)
+    operator.post(f"/api/rounds/{round_id}/append")
+
+    after = operator.get("/api/workbook").json()
+
+    assert len(after["rows"]) > len(before["rows"])
+    written = [
+        r for r in after["rows"] if r["row_number"] not in {b["row_number"] for b in before["rows"]}
+    ]
+    assert written
+    assert all(row["formulas"] for row in written)
+
+
 # --- who may do it -----------------------------------------------------------------------------------
 
 

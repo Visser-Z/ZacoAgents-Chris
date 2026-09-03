@@ -478,6 +478,33 @@ class WorkbookStateOut(BaseModel):
     appended_rounds: list[AppendedRowOut] = Field(default_factory=list)
     ready_rounds: list[ReadyRoundOut] = Field(default_factory=list)
 
+    rows: list[BookRowOut] = Field(default_factory=list)
+    """The book's own rows, so the operator can see the file rather than a summary of it."""
+
+    rows_from: int = 0
+    """The first row number returned. Below `row_count` when a long book has been trimmed to its
+    most recent rows, which is where an append lands and so what an operator opens this to see."""
+
+    numeric_columns: list[str] = Field(default_factory=list)
+    """Columns that read as figures, so the book and the round landing beneath it align the same
+    column the same way. Deciding per cell would align one row's DN and not the next one's."""
+
+    never_written: list[str] = Field(default_factory=list)
+    """Columns this system never writes -- the operator's `NOTES` among them. The page needs it
+    to draw the book without hardcoding which columns belong to whom."""
+
+
+class BookRowOut(BaseModel):
+    """One row the book already holds, drawn as the operator's own spreadsheet draws it."""
+
+    row_number: int
+    cells: dict[str, str] = Field(default_factory=dict)
+    """Keyed by **column letter**, not field name: the operator's own columns have no field name
+    and are as much a part of the row as the ones this system knows."""
+
+    formulas: dict[str, str] = Field(default_factory=dict)
+    """Where a cell holds a formula rather than a value, keyed by column letter."""
+
 
 class PreviewRowOut(BaseModel):
     """One row as it would be written.

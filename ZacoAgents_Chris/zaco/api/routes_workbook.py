@@ -19,6 +19,7 @@ from zaco.api.render import money, number
 from zaco.api.schemas import (
     AppendedRowOut,
     AppendPreviewOut,
+    BookRowOut,
     PreviewRowOut,
     ReadyRoundOut,
     ReasonIn,
@@ -44,6 +45,11 @@ router = APIRouter(prefix="/api/workbook", tags=["workbook"])
 rounds = APIRouter(prefix="/api/rounds", tags=["workbook"])
 
 may_append = requires(Permission.APPEND)
+
+#: How many of the book's own rows the state endpoint draws. An append lands at the bottom, so
+#: the bottom is what an operator opens this page to look at. A book with years in it would
+#: otherwise serialise every row of every sheet on every page load.
+MOST_RECENT_ROWS = 500
 
 
 def _order(layout: SheetLayout) -> list[str]:
@@ -118,8 +124,9 @@ def state(db: Session = Depends(get_db), _: User = Depends(current_user)) -> Wor
         .scalars()
         .all()
     )
-    in_book = read_rows(path, layout)
+    in_book = read_rows(path, layout, with_cells=True)
     agreements = _agreements(db, appended, in_book)
+    shown = in_book[-MOST_RECENT_ROWS:]
     return WorkbookStateOut(
         filename=path.name,
         is_readable=True,
@@ -133,6 +140,12 @@ def state(db: Session = Depends(get_db), _: User = Depends(current_user)) -> Wor
         byte_count=path.stat().st_size,
         versions=_snapshots(),
         ready_rounds=_ready(db),
+        rows=[
+            BookRowOut(row_number=r.row_number, cells=r.cells, formulas=r.formulas) for r in shown
+        ],
+        rows_from=shown[0].row_number if shown else 0,
+        numeric_columns=sorted(_MONEY | _QUANTITY | set(appender.FORMULAS)),
+        never_written=sorted(appender.NEVER_WRITTEN),
         appended_rounds=[
             AppendedRowOut(
                 round_id=r.id,
