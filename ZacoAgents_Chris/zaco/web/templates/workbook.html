@@ -70,12 +70,14 @@
     const done = book.appended_rounds.length ? `
       <h2>Already in the book</h2>
       <div class="panel"><table>
-        <thead><tr><th>Round</th><th>Rows</th><th>When</th><th>By</th></tr></thead>
+        <thead><tr><th>Round</th><th>Rows</th><th>When</th><th>By</th><th></th></tr></thead>
         <tbody>${book.appended_rounds.map((r) => `<tr>
           <td class="mono">#${r.round_id}</td>
           <td class="mono">${r.first_row}&ndash;${r.last_row}</td>
           <td class="muted">${when(r.appended_at)}</td>
-          <td class="muted">${esc(r.appended_by || "-")}</td></tr>`).join("")}</tbody>
+          <td class="muted">${esc(r.appended_by || "-")}</td>
+          <td><button class="link" data-preview="${r.round_id}">See what was written</button></td>
+          </tr>`).join("")}</tbody>
       </table></div>` : "";
 
     readyBox.innerHTML = `
@@ -174,7 +176,16 @@
           ? `<div class="notice">Nothing has been written. This is the round cell by cell, as it would go in.</div>`
           : `<div class="warning">${d.refusals.map(esc).join("<br>")}</div>`}
 
-      ${d.rows.length ? grid(d) : ""}
+      ${d.rows.length ? grid(d) : `
+        <div class="panel">
+          <p style="margin:0 0 .5rem"><strong>This round formed no rows, so there is no grid to draw.</strong></p>
+          <p class="muted" style="margin:0">A row is one delivery, one product and one account sale
+            together. A round whose documents never name an account sale &mdash; a consignment
+            report on its own, say, which cannot tell one payment run from the next &mdash; has
+            nothing to make a row out of. Its sales are held as <em>sold, not yet in any payment
+            run</em> until a payment report names them. The Resolution queue shows what these
+            documents did carry.</p>
+        </div>`}
 
       ${stuck.length ? `
         <h3>Rows that cannot be written yet <span class="muted">(${stuck.length} of ${d.rows.length})</span></h3>
@@ -197,7 +208,7 @@
           <p class="muted" style="margin:.35rem 0 0">${esc(r.why)}</p>
         </div>`).join("")}` : ""}
 
-      ${d.appended_at ? "" : `
+      ${d.appended_at || !d.rows.length ? "" : `
         <div class="panel">
           <button data-append="${d.round_id}" ${d.is_writable ? "" : "disabled"}>
             Append ${d.rows.length} row(s) to the book
