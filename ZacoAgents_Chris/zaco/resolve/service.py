@@ -289,6 +289,13 @@ def _documents(round_: Round) -> list[tuple[str, bytes]]:
     return [(d.filename, d.content) for d in round_.documents if d.counts]
 
 
+#: The statuses that count towards the record. An **appended** round is the most settled thing
+#: there is -- its rows are in the book the business settles money against -- so leaving it out
+#: was the worst of both: the next round would reopen stock that was already sold, forget every
+#: docket it had counted, and report account sales as unpaid that the book says were paid.
+SETTLED_STATUSES = (RoundStatus.RESOLVED.value, RoundStatus.APPENDED.value)
+
+
 @dataclass
 class History:
     """What the rounds before this one already account for."""
@@ -314,7 +321,7 @@ def history(db: Session, before: Round) -> History:
     earlier = (
         db.execute(
             select(Round)
-            .where(Round.status == RoundStatus.RESOLVED.value, Round.id < before.id)
+            .where(Round.status.in_(SETTLED_STATUSES), Round.id < before.id)
             .order_by(Round.id)
         )
         .scalars()
@@ -655,16 +662,20 @@ def restore_document(
 
 
 def rounds_after(db: Session, round_: Round) -> list[Round]:
-    """The resolved rounds derived on top of this one.
+    """The rounds derived on top of this one, appended ones included.
 
-    `history()` walks resolved rounds only, so reopening one drops it out of the history these
-    are built from: their opening stock and their duplicate checks change while it is open, and
-    come back when it is closed again. Correct, and surprising, so it is said out loud.
+    Reopening one drops it out of the history these are built from: their opening stock and their
+    duplicate checks change while it is open, and come back when it is closed again. Correct, and
+    surprising, so it is said out loud.
+
+    An appended round is named here too. It cannot be reopened itself, but it is derived from
+    everything before it, so it is as affected as any other -- and it is the one whose figures
+    are already in the operator's book.
     """
     return list(
         db.execute(
             select(Round)
-            .where(Round.status == RoundStatus.RESOLVED.value, Round.id > round_.id)
+            .where(Round.status.in_(SETTLED_STATUSES), Round.id > round_.id)
             .order_by(Round.id)
         )
         .scalars()
