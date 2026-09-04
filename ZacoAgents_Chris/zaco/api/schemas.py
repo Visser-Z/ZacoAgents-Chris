@@ -7,6 +7,7 @@ kept explicit rather than serialising ORM objects directly.
 from __future__ import annotations
 
 from datetime import date, datetime
+from decimal import Decimal
 
 from pydantic import BaseModel, EmailStr, Field
 
@@ -589,3 +590,97 @@ class AppendPreviewOut(BaseModel):
     appended_rows: str | None = None
     saved_as: str | None = None
     versions: list[SnapshotOut] = Field(default_factory=list)
+
+
+# --- Settlement (Phase 5) ---------------------------------------------------------------------
+
+
+class SupplierIn(BaseModel):
+    name: str
+    contact: str = ""
+    note: str = ""
+
+
+class SupplierOut(BaseModel):
+    """A farmer Zaco carries produce for. Appears in no report; recorded by a person (D13)."""
+
+    id: int
+    name: str
+    contact: str = ""
+    note: str = ""
+    is_active: bool = True
+    created_by: str | None = None
+
+
+class TermsIn(BaseModel):
+    consignment_id: str
+    supplier_id: int
+    percent: Decimal
+    """Zaco's share of the Nett, as a percentage. No default and no fallback (D13)."""
+
+    note: str = ""
+
+
+class TermsOut(BaseModel):
+    id: int
+    consignment_id: str
+    supplier_id: int
+    supplier: str
+    percent: str
+    note: str = ""
+    agreed_by: str | None = None
+    agreed_at: datetime | None = None
+
+
+class PaymentIn(BaseModel):
+    supplier_id: int
+    amount: Decimal
+    reference: str = ""
+    note: str = ""
+
+
+class SettlementLineOut(BaseModel):
+    """One consignment's settlement, or the reason there is not one."""
+
+    consignment_id: str
+    product: str
+    delivery_id: str | None = None
+    supplier: str | None = None
+    percent: str | None = None
+    nett: str | None = None
+    zaco_keeps: str | None = None
+    owed_to_supplier: str | None = None
+    cartons_sold: str = "0"
+    cartons_sent: str | None = None
+    cartons_unsold: str | None = None
+    """`None` where no document says what was sent. Absent is not zero (section 6)."""
+
+    blocked_by: str | None = None
+
+
+class SupplierTotalOut(BaseModel):
+    """What one supplier earned, is owed, has been paid, and handed over that never sold."""
+
+    supplier: str
+    earned: str
+    paid: str
+    owed: str
+    cartons_unsold: str | None = None
+    consignments: int = 0
+
+
+class SettlementOut(BaseModel):
+    """Settlement, with what cannot be settled kept in its own sections (D13)."""
+
+    settled: list[SettlementLineOut] = Field(default_factory=list)
+    awaiting_terms: list[SettlementLineOut] = Field(default_factory=list)
+    awaiting_payment: list[SettlementLineOut] = Field(default_factory=list)
+    by_supplier: list[SupplierTotalOut] = Field(default_factory=list)
+    total_owed: str = "R0.00"
+    total_kept: str = "R0.00"
+    coverage: str = ""
+    """Stated beside every total. A figure over a fifth of the business is only useful if you
+    know it is a fifth (section 9)."""
+
+    suppliers: list[SupplierOut] = Field(default_factory=list)
+    terms: list[TermsOut] = Field(default_factory=list)

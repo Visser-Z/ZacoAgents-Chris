@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from zaco.config import get_settings
 from zaco.db.models import (
+    CommissionTerm,
     DeliveryNote,
     ProductCode,
     ProductDecision,
@@ -37,7 +38,7 @@ from zaco.db.models import (
     utcnow,
 )
 from zaco.domain.build import build_round, load_short_codes
-from zaco.domain.model import ZERO, AccountSale, Row, StagedRound
+from zaco.domain.model import ZERO, AccountSale, Delivery, Row, StagedRound
 from zaco.domain.products import ProductRegistry, Vocabulary, normalise
 from zaco.ingest.classifier import UnrecognisedDocumentError, read_document
 from zaco.resolve import book as book_reader
@@ -45,7 +46,9 @@ from zaco.resolve import queue as queue_builder
 from zaco.resolve.book import BookKnowledge
 from zaco.resolve.dn import DnProvenance, Proposal, propose
 from zaco.resolve.reconcile import Reconciliation, reconcile
+from zaco.resolve.settle import Settlement, Terms, settle
 from zaco.resolve.stock import StockLedger, build_ledger
+from zaco.workbook.append import row_netts
 
 #: Zaco's own producer code, as every supplier reference in the supplied data writes it. A
 #: delivery under any other producer code is somebody else's produce, which is a question
@@ -355,29 +358,25 @@ def settled_rounds(db: Session) -> list[Round]:
     )
 
 
-def reconciliation(db: Session) -> list[Reconciliation]:
-    """Every account sale in the record, with both sides of it held together (section 8).
+def record_so_far(db: Session) -> StagedRound:
+    """Every settled round, accumulated into one view of the business.
 
-    Section 8 reconciles **accumulated** sales, not one round's. A consignment sells across
-    rounds and a payment run lands in whichever round the operator happened to load it in, so a
-    per-round board would report an account sale as unpaid in the round that sold it and as
-    unexplained in the round that paid it -- two warnings about states that are not real, which
-    S6 says is worse than no warning at all.
+    Section 8 reconciles **accumulated** sales, not one round's. A consignment sells across rounds
+    and a payment run lands in whichever round the operator happened to load it in, so a per-round
+    view reports an account sale as unpaid in the round that sold it and as unexplained in the
+    round that paid it -- two warnings about states that are not real, which S6 says is worse than
+    no warning at all.
 
-    So this walks the settled rounds in order, exactly as `history()` does and for the same
-    reason (S1: the documents are the record and everything else is re-derived), and holds the
-    rows every round contributed against the account sales they name.
+    Walked in order, exactly as `history()` does and for the same reason (S1: the documents are
+    the record, everything else is re-derived), so the dockets an earlier round already counted
+    are not counted again here either.
     """
-    settled = (
-        db.execute(select(Round).where(Round.status.in_(SETTLED_STATUSES)).order_by(Round.id))
-        .scalars()
-        .all()
-    )
-
     rows: list[Row] = []
     sales: dict[str, AccountSale] = {}
+    deliveries: dict[str, Delivery] = {}
     counted: set[tuple[str, str, str, str]] = set()
-    for round_ in settled:
+
+    for round_ in settled_rounds(db):
         registry = build_registry(db)
         staged, _ = build_round(
             [(name, read_document(content)) for name, content in _documents(round_)],
@@ -387,11 +386,42 @@ def reconciliation(db: Session) -> list[Reconciliation]:
         )
         rows.extend(staged.rows)
         counted |= staged.docket_identities
-        for number, record in staged.account_sales.items():
-            record.source_name = record.source_name or f"round {round_.id}"
-            sales.setdefault(number, record)
+        for number, account_sale in staged.account_sales.items():
+            account_sale.source_name = account_sale.source_name or f"round {round_.id}"
+            sales.setdefault(number, account_sale)
+        # First sighting wins: what a delivery *sent* is a fact of the delivery, and a later round
+        # reprinting it does not make it a second load.
+        for delivery_id, delivery in staged.deliveries.items():
+            deliveries.setdefault(delivery_id, delivery)
 
-    return reconcile(StagedRound(rows=rows, account_sales=sales))
+    return StagedRound(rows=rows, account_sales=sales, deliveries=deliveries)
+
+
+def reconciliation(db: Session) -> list[Reconciliation]:
+    """Every account sale in the record, with both sides of it held together (section 8)."""
+    return reconcile(record_so_far(db))
+
+
+def settlement(db: Session) -> Settlement:
+    """What every supplier is owed, and every consignment this system cannot speak for.
+
+    The terms come from the database because they exist nowhere else -- suppliers appear in no
+    report. The money comes from the same `row_netts` the workbook writes, so a supplier is never
+    settled against a figure the operator's book does not hold.
+    """
+    combined = record_so_far(db)
+    paid, _ = row_netts(combined)
+    agreed = {r.account_sale: r for r in reconcile(combined)}
+
+    terms = {
+        term.consignment_id: Terms(
+            consignment_id=term.consignment_id,
+            supplier=term.supplier.name,
+            percent=term.percent,
+        )
+        for term in db.execute(select(CommissionTerm)).scalars()
+    }
+    return settle(combined, terms, agreed, paid)
 
 
 def load(db: Session, round_: Round) -> ResolvedRound:

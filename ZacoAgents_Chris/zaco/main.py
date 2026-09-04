@@ -23,6 +23,7 @@ from zaco.api import (
     routes_ingest,
     routes_queue,
     routes_rounds,
+    routes_settlement,
     routes_workbook,
 )
 from zaco.auth.service import seed_admin
@@ -122,6 +123,7 @@ def create_app() -> FastAPI:
     app.include_router(routes_workbook.router)
     app.include_router(routes_workbook.rounds)
     app.include_router(routes_workbook.board)
+    app.include_router(routes_settlement.router)
     app.include_router(routes_queue.products)
     app.include_router(web_routes.router)
 

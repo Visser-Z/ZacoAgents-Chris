@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}Settlement{% endblock %}
+{% block main_class %}wide{% endblock %}
+
+{% block content %}
+<h1>Settlement</h1>
+<p class="lede">Everything above the Nett line the agent's reports state. Everything below it
+  exists only here &mdash; the agents see Zaco as the supplier and know nothing about the farmers
+  behind it. A consignment with no agreed commission produces no settlement at all, and is shown
+  in its own section rather than folded into a total.</p>
+
+<div id="summary"></div>
+<div id="register"></div>
+<div id="lines"></div>
+
+<script>
+(() => {
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  const summaryBox = document.getElementById("summary");
+  const registerBox = document.getElementById("register");
+  const linesBox = document.getElementById("lines");
+
+  let data = null;
+
+  async function json(method, url, body) {
+    const response = await fetch(url, {
+      method,
+      headers: body === undefined ? {} : { "Content-Type": "application/json" },
+      credentials: "same-origin",
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      const d = payload && payload.detail;
+      throw new Error(typeof d === "string" ? d : `Failed (${response.status})`);
+    }
+    return payload;
+  }
+
+  function drawSummary() {
+    summaryBox.innerHTML = `
+      <div class="panel">
+        <table><tbody>
+          <tr><td>Owed to suppliers</td><td class="num mono">${esc(data.total_owed)}</td></tr>
+          <tr><td>Zaco's share</td><td class="num mono">${esc(data.total_kept)}</td></tr>
+        </tbody></table>
+        <p class="muted" style="margin:.6rem 0 0">${esc(data.coverage)}</p>
+      </div>
+      ${data.by_supplier.length ? `
+        <h2>By supplier</h2>
+        <div class="panel"><table>
+          <thead><tr><th>Supplier</th><th class="num">Earned</th><th class="num">Paid</th>
+            <th class="num">Owed</th><th class="num">Cartons never sold</th>
+            <th class="num">Lines</th></tr></thead>
+          <tbody>${data.by_supplier.map((s) => `<tr>
+            <td>${esc(s.supplier)}</td>
+            <td class="num mono">${esc(s.earned)}</td>
+            <td class="num mono">${esc(s.paid)}</td>
+            <td class="num mono"><strong>${esc(s.owed)}</strong></td>
+            <td class="num">${s.cartons_unsold === null
+              ? '<span class="chip">not reported</span>' : esc(s.cartons_unsold)}</td>
+            <td class="num muted">${s.consignments}</td>
+          </tr>`).join("")}</tbody>
+        </table>
+        <p class="muted" style="font-size:.9em;margin:.6rem 0 0">Cartons that never sold cost the
+          supplier, not Zaco &mdash; on consignment the supplier is paid on what sold. They are
+          shown because they are worth knowing, not because they are owed for.</p>
+        </div>` : ""}`;
+  }
+
+  function drawRegister() {
+    registerBox.innerHTML = `
+      <h2>Suppliers <span class="muted">(${data.suppliers.length})</span></h2>
+      ${data.suppliers.length
+        ? `<div class="panel"><table>
+             <thead><tr><th>Name</th><th>Contact</th><th>Added by</th></tr></thead>
+             <tbody>${data.suppliers.map((s) => `<tr>
+               <td>${esc(s.name)}</td><td class="muted">${esc(s.contact || "-")}</td>
+               <td class="muted">${esc(s.created_by || "-")}</td></tr>`).join("")}</tbody>
+           </table></div>`
+        : `<p class="muted">None yet. Suppliers appear in no report &mdash; the agents see Zaco as
+             the supplier &mdash; so the register starts empty and is filled by hand.</p>`}
+      <div class="panel">
+        <label for="supplier-name">Add a supplier</label>
+        <input id="supplier-name" type="text" placeholder="e.g. Sunnyvale Orchards">
+        <label for="supplier-contact">Contact (optional)</label>
+        <input id="supplier-contact" type="text">
+        <button id="add-supplier">Add</button>
+      </div>`;
+
+    document.getElementById("add-supplier").addEventListener("click", async () => {
+      const name = document.getElementById("supplier-name").value.trim();
+      const contact = document.getElementById("supplier-contact").value.trim();
+      try {
+        await json("POST", "/api/suppliers", { name, contact });
+        await load();
+      } catch (e) { window.alert(e.message); }
+    });
+  }
+
+  function lineRow(line, withMoney) {
+    return `
+      <tr>
+        <td class="mono">${esc(line.consignment_id)}</td>
+        <td>${esc(line.product)}</td>
+        <td class="muted">${esc(line.supplier || "-")}</td>
+        <td class="num">${line.percent ? esc(line.percent) + "%" : "-"}</td>
+        <td class="num mono">${esc(line.nett || "-")}</td>
+        ${withMoney ? `
+          <td class="num mono">${esc(line.zaco_keeps || "-")}</td>
+          <td class="num mono"><strong>${esc(line.owed_to_supplier || "-")}</strong></td>` : ""}
+        <td class="num">${esc(line.cartons_sold)}</td>
+        <td class="num">${line.cartons_unsold === null
+          ? '<span class="chip">not reported</span>' : esc(line.cartons_unsold)}</td>
+      </tr>
+      ${line.blocked_by
+        ? `<tr><td></td><td colspan="${withMoney ? 8 : 6}" class="finding-quiet">${esc(line.blocked_by)}</td></tr>`
+        : ""}`;
+  }
+
+  function section(title, lines, withMoney, empty) {
+    if (!lines.length) return `<h2>${esc(title)} <span class="muted">(none)</span></h2>
+      <p class="muted">${esc(empty)}</p>`;
+    return `
+      <h2>${esc(title)} <span class="muted">(${lines.length})</span></h2>
+      <div class="panel"><table>
+        <thead><tr>
+          <th>Consignment</th><th>Product</th><th>Supplier</th><th class="num">Terms</th>
+          <th class="num">Nett</th>
+          ${withMoney ? '<th class="num">Zaco keeps</th><th class="num">Owed</th>' : ""}
+          <th class="num">Sold</th><th class="num">Never sold</th>
+        </tr></thead>
+        <tbody>${lines.map((l) => lineRow(l, withMoney)).join("")}</tbody>
+      </table></div>`;
+  }
+
+  function drawLines() {
+    linesBox.innerHTML = `
+      ${section("Settled", data.settled, true,
+        "Nothing can be settled yet. A consignment needs both agreed terms and a payment that reconciles.")}
+      ${section("Awaiting terms", data.awaiting_terms, false,
+        "Every consignment with a payment behind it has agreed terms.")}
+      ${section("Awaiting payment", data.awaiting_payment, false,
+        "Nothing is waiting on a payment run.")}`;
+  }
+
+  async function load() {
+    try {
+      data = await json("GET", "/api/settlement");
+      drawSummary(); drawRegister(); drawLines();
+    } catch (e) {
+      summaryBox.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+    }
+  }
+
+  load();
+})();
+</script>
+{% endblock %}
