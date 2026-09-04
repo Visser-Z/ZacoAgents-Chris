@@ -26,7 +26,9 @@ from typing import Any
 
 from openpyxl import load_workbook
 
-from zaco.domain.model import display_account_sale
+from zaco.domain.model import StagedRound, display_account_sale
+from zaco.money.allocate import CannotAllocateError, allocate
+from zaco.resolve.reconcile import reconcile
 from zaco.workbook import snapshot
 from zaco.workbook.locate import SheetLayout, WorkbookShapeError, locate
 
@@ -171,6 +173,7 @@ def plan(resolved: Any) -> AppendPlan:
     rows_per_sale: dict[str, int] = {}
     for row in staged.rows:
         rows_per_sale[row.account_sale] = rows_per_sale.get(row.account_sale, 0) + 1
+    nett_shares, nett_refusals = _nett_shares(staged)
 
     for offset, row in enumerate(staged.rows):
         note = resolved.approved.get(row.delivery_id or "")
@@ -302,9 +305,9 @@ def plan(resolved: Any) -> AppendPlan:
             )
 
         # --- the payment side ---------------------------------------------------------------------
-        # Nett is the payment side's figure for the whole account sale. Splitting one across
-        # several rows is section 8's job and has to sum to the payment exactly, so it is left
-        # for Phase 5 rather than guessed at here.
+        # A row is delivery x product x account sale, so it names exactly one account sale and
+        # takes one share. Section 8's "a row that names more than one" cannot arise at this
+        # grain; it would if the grain were the consignment.
         named = display_account_sale(row.account_sale)
         if sale is None or sale.nett is None:
             planned.blank(
@@ -314,12 +317,23 @@ def plan(resolved: Any) -> AppendPlan:
             )
         elif rows_per_sale[row.account_sale] == 1:
             planned.values["nett_total"] = sale.nett
+        elif (share := nett_shares.get(offset)) is not None:
+            planned.values["nett_total"] = share
+            planned.notes.append(
+                f"{sale.display_number} pays R{sale.nett:,.2f} across "
+                f"{rows_per_sale[row.account_sale]} rows. This row's share of it is "
+                f"R{share:,.2f}, worked out by sales value; the shares sum to the payment "
+                f"exactly. Apportioned, not printed -- type over it if the split is wrong."
+            )
         else:
             planned.blank(
                 "nett_total",
                 f"split across {rows_per_sale[row.account_sale]} rows",
-                f"{sale.display_number} pays R{sale.nett:,.2f} across "
-                f"{rows_per_sale[row.account_sale]} rows, and apportioning it is section 8.",
+                nett_refusals.get(
+                    row.account_sale,
+                    f"{sale.display_number} pays R{sale.nett:,.2f} across "
+                    f"{rows_per_sale[row.account_sale]} rows and the split could not be made.",
+                ),
             )
 
         paid = sale.date_paid if sale else None
@@ -334,6 +348,57 @@ def plan(resolved: Any) -> AppendPlan:
     if not built.rows and not built.refusals:
         built.refusals.append("This round produced no rows, so there is nothing to append.")
     return built
+
+
+def _nett_shares(staged: StagedRound) -> tuple[dict[int, Decimal], dict[str, str]]:
+    """Each row's share of an account sale that settles several of them (section 8).
+
+    "An account sale settles several rows at once, so its Nett is split between them by sales
+    value... The shares must add up to the payment exactly."
+
+    **Only fully matched groups are filled.** A group where the two sides disagree would
+    otherwise receive a Nett for produce not all paid for yet. That rule also does the work of a
+    guard nobody has to write: a group whose rows are split across two rounds can never be fully
+    matched inside either of them, so neither round writes a figure and the payment is not
+    settled twice.
+
+    Returns the share per row offset, and per account sale the reason there is no share, so the
+    cell can carry it instead of a number.
+    """
+    shares: dict[int, Decimal] = {}
+    refusals: dict[str, str] = {}
+
+    grouped: dict[str, list[int]] = {}
+    for offset, row in enumerate(staged.rows):
+        grouped.setdefault(row.account_sale, []).append(offset)
+
+    agreed = {r.account_sale: r for r in reconcile(staged)}
+    for number, offsets in grouped.items():
+        if len(offsets) < 2:
+            continue
+        sale = staged.account_sales.get(number)
+        if sale is None or sale.nett is None:
+            continue
+        found = agreed.get(number)
+        if found is None or not found.agrees:
+            refusals[number] = (
+                f"{sale.display_number} pays R{sale.nett:,.2f} across {len(offsets)} rows, and "
+                f"the two sides do not agree: {found.note if found else 'nothing reconciles it'} "
+                f"Only a fully matched group is filled, because a part-paid one would take a "
+                f"Nett for produce nobody has been paid for yet."
+            )
+            continue
+        try:
+            portions = allocate(sale.nett, [staged.rows[i].value for i in offsets])
+        except CannotAllocateError as refusal:
+            refusals[number] = (
+                f"{sale.display_number} pays R{sale.nett:,.2f} across {len(offsets)} rows and "
+                f"the split cannot be made: {refusal}"
+            )
+            continue
+        for offset, portion in zip(offsets, portions, strict=True):
+            shares[offset] = portion
+    return shares, refusals
 
 
 def _priced(row: Any, planned: PlannedRow) -> Decimal | None:
