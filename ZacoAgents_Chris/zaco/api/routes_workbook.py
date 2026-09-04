@@ -9,13 +9,14 @@ hid that would hide the one thing worth checking.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from decimal import Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from zaco.api.render import money, number
+from zaco.api.render import money, number, optional_money
 from zaco.api.schemas import (
     AppendedRowOut,
     AppendPreviewOut,
@@ -23,6 +24,8 @@ from zaco.api.schemas import (
     PreviewRowOut,
     ReadyRoundOut,
     ReasonIn,
+    ReconciliationBoardOut,
+    ReconciliationOut,
     SnapshotOut,
     WorkbookStateOut,
 )
@@ -31,6 +34,7 @@ from zaco.auth.permissions import Permission
 from zaco.db.base import get_db
 from zaco.db.models import Round, RoundAction, RoundStatus, User, utcnow
 from zaco.resolve import service
+from zaco.resolve.reconcile import LABELS, Reconciliation, State, by_state
 from zaco.workbook import agreement, snapshot
 from zaco.workbook import append as appender
 from zaco.workbook.locate import (
@@ -238,6 +242,52 @@ def _as_text(value: object) -> str | None:
     if isinstance(value, float) and value.is_integer():
         return str(int(value))
     return str(value)
+
+
+board = APIRouter(prefix="/api/reconciliation", tags=["reconciliation"])
+
+
+@board.get("", response_model=ReconciliationBoardOut)
+def reconciliation(
+    db: Session = Depends(get_db),
+    _: User = Depends(requires(Permission.VIEW_REPORTS)),
+) -> ReconciliationBoardOut:
+    """Every account sale in the record, grouped by state (section 8)."""
+    found = service.reconciliation(db)
+    grouped = by_state(found)
+
+    totals: dict[str, str] = {}
+    for state, items in grouped.items():
+        paid = sum((r.nett for r in items if r.nett is not None), Decimal(0))
+        totals[state.value] = money(paid)
+
+    return ReconciliationBoardOut(
+        states=[s.value for s in State],
+        labels={s.value: LABELS[s] for s in State},
+        grouped={
+            state.value: [_reconciliation(r) for r in items] for state, items in grouped.items()
+        },
+        totals=totals,
+        rounds_covered=len(service.settled_rounds(db)),
+    )
+
+
+def _reconciliation(found: Reconciliation) -> ReconciliationOut:
+    return ReconciliationOut(
+        account_sale=found.account_sale,
+        display_number=found.display_number,
+        state=found.state.value,
+        label=found.label,
+        sold=optional_money(found.sold),
+        paid=optional_money(found.paid),
+        difference=optional_money(found.difference),
+        nett=optional_money(found.nett),
+        row_count=found.row_count,
+        market=found.market,
+        agent=found.agent,
+        can_never_reconcile=found.can_never_reconcile,
+        note=found.note,
+    )
 
 
 @router.get("/download", response_class=FileResponse)

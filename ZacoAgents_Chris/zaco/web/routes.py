@@ -36,7 +36,7 @@ NAV = [
     ("/staged", "Stage a round", Permission.INGEST, None),
     ("/queue", "Resolution queue", Permission.RESOLVE, None),
     ("/workbook", "Workbook", Permission.APPEND, None),
-    ("/reconciliation", "Reconciliation", Permission.VIEW_REPORTS, "Phase 5"),
+    ("/reconciliation", "Reconciliation", Permission.VIEW_REPORTS, None),
     ("/settlement", "Settlement", Permission.RECORD_TERMS, "Phase 5"),
     ("/reports", "Reports", Permission.VIEW_REPORTS, "Phase 6"),
     ("/conduct", "Agent conduct", Permission.VIEW_REPORTS, "Phase 7"),
@@ -121,6 +121,17 @@ def queue_page(
     if not user.can(Permission.RESOLVE):
         return _page(request, "forbidden.html", user, needed=Permission.RESOLVE)
     return _page(request, "queue.html", user)
+
+
+@router.get("/reconciliation", response_model=None)
+def reconciliation_page(
+    request: Request, user: User | None = Depends(current_user_optional)
+) -> HTMLResponse | RedirectResponse:
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    if not user.can(Permission.VIEW_REPORTS):
+        return _page(request, "forbidden.html", user, needed=Permission.VIEW_REPORTS)
+    return _page(request, "reconciliation.html", user)
 
 
 @router.get("/workbook", response_model=None)

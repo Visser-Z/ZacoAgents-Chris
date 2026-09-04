@@ -360,3 +360,12 @@ table.grid tbody tr.landing:hover { --cell-bg: #e4f0ec; --cell-formula-bg: #dae8
 
 .legend .swatch.owned { background: #fbf7ef; border-color: #d8ccae; }
 .legend .swatch.landing { background: #fdfdfb; border-style: dashed; border-color: #9aa8a4; }
+
+/* The reconciliation board: the reason under each row rather than in a column, because it is a
+   sentence and a column of sentences stops being a table. */
+td.finding-quiet {
+  color: var(--muted);
+  font-size: 0.92em;
+  padding-top: 0;
+  white-space: normal;
+}

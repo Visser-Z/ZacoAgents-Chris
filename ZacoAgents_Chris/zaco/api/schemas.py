@@ -452,6 +452,40 @@ class ReadyRoundOut(BaseModel):
     resolved_by: str | None = None
 
 
+class ReconciliationOut(BaseModel):
+    """One account sale, both sides of it, and whether they agree (section 8)."""
+
+    account_sale: str
+    display_number: str
+    state: str
+    label: str
+    sold: str | None = None
+    """What the sales side accounts for. A string, so no client turns a Decimal into a float."""
+
+    paid: str | None = None
+    difference: str | None = None
+    nett: str | None = None
+    row_count: int = 0
+    market: str | None = None
+    agent: str | None = None
+    can_never_reconcile: bool = False
+    note: str = ""
+
+
+class ReconciliationBoardOut(BaseModel):
+    """The whole record's account sales, grouped by state.
+
+    Groups with nothing in them are kept, so a state reads as "none of these" rather than
+    disappearing -- an operator should be able to see that nothing is unaccounted for.
+    """
+
+    states: list[str] = Field(default_factory=list)
+    labels: dict[str, str] = Field(default_factory=dict)
+    grouped: dict[str, list[ReconciliationOut]] = Field(default_factory=dict)
+    totals: dict[str, str] = Field(default_factory=dict)
+    rounds_covered: int = 0
+
+
 class WorkbookStateOut(BaseModel):
     """The book as it stands, and the letters its columns actually resolved to.
 

@@ -37,13 +37,14 @@ from zaco.db.models import (
     utcnow,
 )
 from zaco.domain.build import build_round, load_short_codes
-from zaco.domain.model import ZERO, AccountSale, StagedRound
+from zaco.domain.model import ZERO, AccountSale, Row, StagedRound
 from zaco.domain.products import ProductRegistry, Vocabulary, normalise
 from zaco.ingest.classifier import UnrecognisedDocumentError, read_document
 from zaco.resolve import book as book_reader
 from zaco.resolve import queue as queue_builder
 from zaco.resolve.book import BookKnowledge
 from zaco.resolve.dn import DnProvenance, Proposal, propose
+from zaco.resolve.reconcile import Reconciliation, reconcile
 from zaco.resolve.stock import StockLedger, build_ledger
 
 #: Zaco's own producer code, as every supplier reference in the supplied data writes it. A
@@ -343,6 +344,54 @@ def history(db: Session, before: Round) -> History:
             record.source_name = record.source_name or f"round {previous.id}"
             past.settled.setdefault(number, record)
     return past
+
+
+def settled_rounds(db: Session) -> list[Round]:
+    """Every round that counts towards the record, oldest first."""
+    return list(
+        db.execute(select(Round).where(Round.status.in_(SETTLED_STATUSES)).order_by(Round.id))
+        .scalars()
+        .all()
+    )
+
+
+def reconciliation(db: Session) -> list[Reconciliation]:
+    """Every account sale in the record, with both sides of it held together (section 8).
+
+    Section 8 reconciles **accumulated** sales, not one round's. A consignment sells across
+    rounds and a payment run lands in whichever round the operator happened to load it in, so a
+    per-round board would report an account sale as unpaid in the round that sold it and as
+    unexplained in the round that paid it -- two warnings about states that are not real, which
+    S6 says is worse than no warning at all.
+
+    So this walks the settled rounds in order, exactly as `history()` does and for the same
+    reason (S1: the documents are the record and everything else is re-derived), and holds the
+    rows every round contributed against the account sales they name.
+    """
+    settled = (
+        db.execute(select(Round).where(Round.status.in_(SETTLED_STATUSES)).order_by(Round.id))
+        .scalars()
+        .all()
+    )
+
+    rows: list[Row] = []
+    sales: dict[str, AccountSale] = {}
+    counted: set[tuple[str, str, str, str]] = set()
+    for round_ in settled:
+        registry = build_registry(db)
+        staged, _ = build_round(
+            [(name, read_document(content)) for name, content in _documents(round_)],
+            registry,
+            counted,
+            dict(sales),
+        )
+        rows.extend(staged.rows)
+        counted |= staged.docket_identities
+        for number, record in staged.account_sales.items():
+            record.source_name = record.source_name or f"round {round_.id}"
+            sales.setdefault(number, record)
+
+    return reconcile(StagedRound(rows=rows, account_sales=sales))
 
 
 def load(db: Session, round_: Round) -> ResolvedRound:
