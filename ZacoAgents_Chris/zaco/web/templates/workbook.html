@@ -174,10 +174,13 @@
       .map((name) => book.letters[name]).filter(Boolean));
   }
 
-  function headerRow(all) {
+  // A heading over a column of figures is right-aligned with them, the same way the cells are.
+  // The letter stays first so the header row still reads as a spreadsheet's does.
+  function headerRow(all, numeric) {
     return `<thead><tr>
       <th class="rownum">#</th>
-      ${all.map((c) => `<th><span class="letter">${esc(c.letter)}</span>
+      ${all.map((c) => `<th class="${numeric.has(c.letter) ? "num" : ""}">
+        <span class="letter">${esc(c.letter)}</span>
         <span class="header">${esc(c.header)}</span></th>`).join("")}
     </tr></thead>`;
   }
@@ -227,7 +230,7 @@
       <h2>${esc(book.filename)}
         <span class="muted">&mdash; ${esc(book.sheet_name)}, ${book.row_count} row(s)</span></h2>
       <div class="grid-wrap"><table class="grid">
-        ${headerRow(all)}
+        ${headerRow(all, numeric)}
         <tbody>
           ${book.rows.map((row) => `
             <tr class="${already.has(row.row_number) ? "highlit" : ""}">

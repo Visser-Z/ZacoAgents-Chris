@@ -105,7 +105,10 @@ button.link { background: none; border: none; color: var(--accent); padding: 0; 
 table { width: 100%; border-collapse: collapse; font-size: 0.94em; }
 th, td { text-align: left; padding: 0.45rem 0.6rem; border-bottom: 1px solid var(--line); vertical-align: top; }
 th { color: var(--muted); font-weight: 600; font-size: 0.86em; text-transform: uppercase; letter-spacing: 0.03em; }
-td.num { text-align: right; font-variant-numeric: tabular-nums; }
+/* A column of figures is read down its right edge, so its heading belongs there too.
+   Without this the label sits at one edge of the column and the numbers at the other, and
+   the wider the column the less the two look like they belong together. */
+th.num, td.num { text-align: right; font-variant-numeric: tabular-nums; }
 tr.inactive td { color: var(--muted); }
 
 .tag {
@@ -369,3 +372,7 @@ td.finding-quiet {
   padding-top: 0;
   white-space: normal;
 }
+
+/* A grid heading over a column of figures is right-aligned with them. The letter still comes
+   first, so the header row reads the way a spreadsheet's does. */
+table.grid thead th.num { text-align: right; }
