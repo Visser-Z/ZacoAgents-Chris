@@ -19,7 +19,7 @@ from zaco.domain.build import build_round
 from zaco.domain.model import AccountSale, DocketFact, Row, StagedRound
 from zaco.domain.products import ProductIdentity
 from zaco.ingest.classifier import read_document
-from zaco.workbook.append import _nett_shares
+from zaco.workbook.append import row_netts
 
 DATA = Path(__file__).resolve().parent.parent / "data"
 
@@ -54,7 +54,7 @@ def round_two() -> StagedRound:
 
 def test_the_shares_sum_to_the_payment_exactly(round_two: StagedRound) -> None:
     """382880: R250.00 over three equal rows. Rounding each gives R249.99."""
-    shares, _ = _nett_shares(round_two)
+    shares, _ = row_netts(round_two)
     offsets = [i for i, row in enumerate(round_two.rows) if row.account_sale.endswith("382880")]
 
     assert len(offsets) == 3
@@ -63,19 +63,28 @@ def test_the_shares_sum_to_the_payment_exactly(round_two: StagedRound) -> None:
     assert sum(given) == Decimal("250.00")
 
 
-def test_a_row_that_is_the_only_one_under_its_sale_is_not_apportioned(
+def test_a_row_that_is_the_only_one_under_its_sale_takes_the_printed_nett(
     round_two: StagedRound,
 ) -> None:
-    """A single-row account sale takes the printed Nett itself, and never goes near the split."""
-    shares, _ = _nett_shares(round_two)
+    """One row under an account sale has no proportions, so it takes the Nett as printed.
+
+    Not an inconsistency with the rule above: that rule exists to stop untrustworthy proportions
+    being used, and there are none here. Withholding the figure would leave a cell empty over a
+    disagreement about the gross, which is a different number.
+    """
+    shares, _ = row_netts(round_two)
     single = [
-        i
+        (i, row)
         for i, row in enumerate(round_two.rows)
         if sum(1 for other in round_two.rows if other.account_sale == row.account_sale) == 1
     ]
 
     assert single
-    assert not any(i in shares for i in single)
+    for offset, row in single:
+        sale = round_two.account_sales.get(row.account_sale)
+        if sale is None or sale.nett is None:
+            continue
+        assert shares[offset] == sale.nett
 
 
 def _row(number: str, product: str, value: str) -> Row:
@@ -124,7 +133,7 @@ def test_a_group_the_two_sides_disagree_on_gets_no_figure_and_a_reason() -> None
         },
     )
 
-    shares, refusals = _nett_shares(staged)
+    shares, refusals = row_netts(staged)
 
     assert shares == {}, "a group the two sides disagree on must receive no Nett at all"
     assert number in refusals
@@ -147,7 +156,7 @@ def test_a_group_the_two_sides_agree_on_is_filled() -> None:
         },
     )
 
-    shares, refusals = _nett_shares(staged)
+    shares, refusals = row_netts(staged)
 
     assert refusals == {}
     assert shares == {0: Decimal("510.00"), 1: Decimal("340.00")}

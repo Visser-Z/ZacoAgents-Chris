@@ -173,7 +173,7 @@ def plan(resolved: Any) -> AppendPlan:
     rows_per_sale: dict[str, int] = {}
     for row in staged.rows:
         rows_per_sale[row.account_sale] = rows_per_sale.get(row.account_sale, 0) + 1
-    nett_shares, nett_refusals = _nett_shares(staged)
+    nett_shares, nett_refusals = row_netts(staged)
 
     for offset, row in enumerate(staged.rows):
         note = resolved.approved.get(row.delivery_id or "")
@@ -315,16 +315,15 @@ def plan(resolved: Any) -> AppendPlan:
                 "no payment run",
                 f"No payment document in this round accounts for {named}.",
             )
-        elif rows_per_sale[row.account_sale] == 1:
-            planned.values["nett_total"] = sale.nett
         elif (share := nett_shares.get(offset)) is not None:
             planned.values["nett_total"] = share
-            planned.notes.append(
-                f"{sale.display_number} pays R{sale.nett:,.2f} across "
-                f"{rows_per_sale[row.account_sale]} rows. This row's share of it is "
-                f"R{share:,.2f}, worked out by sales value; the shares sum to the payment "
-                f"exactly. Apportioned, not printed -- type over it if the split is wrong."
-            )
+            if rows_per_sale[row.account_sale] > 1:
+                planned.notes.append(
+                    f"{sale.display_number} pays R{sale.nett:,.2f} across "
+                    f"{rows_per_sale[row.account_sale]} rows. This row's share of it is "
+                    f"R{share:,.2f}, worked out by sales value; the shares sum to the payment "
+                    f"exactly. Apportioned, not printed -- type over it if the split is wrong."
+                )
         else:
             planned.blank(
                 "nett_total",
@@ -350,20 +349,25 @@ def plan(resolved: Any) -> AppendPlan:
     return built
 
 
-def _nett_shares(staged: StagedRound) -> tuple[dict[int, Decimal], dict[str, str]]:
-    """Each row's share of an account sale that settles several of them (section 8).
+def row_netts(staged: StagedRound) -> tuple[dict[int, Decimal], dict[str, str]]:
+    """What each row is paid, and per account sale the reason a row is not (section 8).
 
     "An account sale settles several rows at once, so its Nett is split between them by sales
     value... The shares must add up to the payment exactly."
 
-    **Only fully matched groups are filled.** A group where the two sides disagree would
+    **A group of several rows is filled only when the two sides agree.** One that does not would
     otherwise receive a Nett for produce not all paid for yet. That rule also does the work of a
     guard nobody has to write: a group whose rows are split across two rounds can never be fully
     matched inside either of them, so neither round writes a figure and the payment is not
     settled twice.
 
-    Returns the share per row offset, and per account sale the reason there is no share, so the
-    cell can carry it instead of a number.
+    **A group of one row is filled either way**, and that is not an inconsistency. The rule
+    exists to stop untrustworthy *proportions* being used, and a single row has no proportions --
+    the whole Nett belongs to the only row under the account sale however the gross is disputed.
+    Withholding it there would leave a cell empty over a disagreement about a different figure.
+
+    The workbook writes these; settlement reads the same map, so a supplier is never settled
+    against a figure the book does not hold.
     """
     shares: dict[int, Decimal] = {}
     refusals: dict[str, str] = {}
@@ -374,10 +378,11 @@ def _nett_shares(staged: StagedRound) -> tuple[dict[int, Decimal], dict[str, str
 
     agreed = {r.account_sale: r for r in reconcile(staged)}
     for number, offsets in grouped.items():
-        if len(offsets) < 2:
-            continue
         sale = staged.account_sales.get(number)
         if sale is None or sale.nett is None:
+            continue
+        if len(offsets) == 1:
+            shares[offsets[0]] = sale.nett
             continue
         found = agreed.get(number)
         if found is None or not found.agrees:

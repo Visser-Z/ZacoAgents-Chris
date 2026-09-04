@@ -12,6 +12,7 @@ says a domain decided.
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from decimal import Decimal
 from enum import StrEnum
 
 from sqlalchemy import (
@@ -21,6 +22,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     LargeBinary,
+    Numeric,
     String,
     Text,
     UniqueConstraint,
@@ -352,3 +354,76 @@ class Suspension(Base):
     @property
     def is_decided(self) -> bool:
         return self.decided_at is not None
+
+
+class Supplier(Base):
+    """A farmer Zaco carries produce for (section 8, D13).
+
+    Suppliers appear in **no report**. The agents see Zaco as the supplier and know nothing about
+    the farmers behind it, so everything below the Nett line exists only here. The register is
+    seeded with nothing; a supplier is created by a person or it does not exist.
+    """
+
+    __tablename__ = "suppliers"
+    __table_args__ = (UniqueConstraint("name", name="uq_suppliers_name"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    name: Mapped[str] = mapped_column(String(200), index=True)
+    contact: Mapped[str] = mapped_column(Text, default="")
+    note: Mapped[str] = mapped_column(Text, default="")
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), default=None)
+
+    created_by: Mapped[User | None] = relationship()
+
+
+class CommissionTerm(Base):
+    """What Zaco keeps of the Nett on one delivery line, and who agreed it (section 8).
+
+    Keyed on the **consignment**, because that is the delivery line: one product within one
+    delivery. Terms are agreed per delivery line, not per supplier and not per round, so a
+    supplier on different terms for two products is expressible rather than averaged.
+
+    `percent` is Zaco's share of the Nett. There is no default and there is no fallback: a
+    consignment with no recorded commission produces no settlement at all (D13). A default here
+    would be a fabrication in a payable, which section 5 distinguishes sharply from the visible,
+    editable 70% suggestion in workbook column I.
+    """
+
+    __tablename__ = "commission_terms"
+    __table_args__ = (UniqueConstraint("consignment_id", name="uq_commission_consignment"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    consignment_id: Mapped[str] = mapped_column(String(100), index=True)
+    supplier_id: Mapped[int] = mapped_column(ForeignKey("suppliers.id", ondelete="CASCADE"))
+    percent: Mapped[Decimal] = mapped_column(Numeric(6, 3))
+    """Zaco's percentage of the Nett. NUMERIC so a rate never becomes a float."""
+
+    note: Mapped[str] = mapped_column(Text, default="")
+    agreed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    agreed_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), default=None)
+
+    supplier: Mapped[Supplier] = relationship()
+    agreed_by: Mapped[User | None] = relationship()
+
+
+class SupplierPayment(Base):
+    """Money actually sent to a supplier.
+
+    Section 12: moving money is not required. This records that a payment happened so "has been
+    paid" can be reported against "is owed"; it does not execute anything.
+    """
+
+    __tablename__ = "supplier_payments"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    supplier_id: Mapped[int] = mapped_column(ForeignKey("suppliers.id", ondelete="CASCADE"))
+    amount: Mapped[Decimal] = mapped_column(Numeric(14, 2))
+    reference: Mapped[str] = mapped_column(String(200), default="")
+    note: Mapped[str] = mapped_column(Text, default="")
+    paid_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    recorded_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), default=None)
+
+    supplier: Mapped[Supplier] = relationship()
+    recorded_by: Mapped[User | None] = relationship()
