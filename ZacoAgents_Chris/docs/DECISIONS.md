@@ -198,8 +198,13 @@ round-1 CSV, so FMS ID is not a key either — the account sale number is.
 
 ## D13 — Suppliers and commission
 
-The registers are built and **seeded with nothing**. Suppliers appear in no report; the agents
-see Zaco as the supplier and know nothing about the farmers behind it.
+The registers are **seeded with nothing**. Suppliers appear in no report; the agents see Zaco as
+the supplier and know nothing about the farmers behind it, so a supplier exists because a person
+entered one or it does not exist at all.
+
+*Built in Phase 5* (`0005_settlement`): `suppliers`, `commission_terms` keyed on the consignment
+because that is the delivery line, and `supplier_payments`. Until then this section described an
+intention and read as though it described the code.
 
 - **A consignment with no recorded commission produces no settlement at all** — never one
   computed at a default rate.

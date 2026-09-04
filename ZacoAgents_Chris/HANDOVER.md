@@ -120,9 +120,9 @@ PersonalTest/ hand-made documents for trying the system by hand; see its README
 | 2 — domain model and grain (§3, §6) | done |
 | 3 — resolution queue (§7) | done |
 | 3.5 — taking a document back out | done |
-| 4 — the workbook (§5) | **done in substance, unfinished on screen** — see the open items |
+| 4 — the workbook (§5) | done; the page draws the book itself since 2026-09-04 |
 | 4.5 — promote to Render | not started; needs Chris's Render account |
-| 5 — reconciliation, Nett, settlement (§8) | not started |
+| 5 — reconciliation, Nett, settlement (§8) | done |
 | 6 — reporting (§9) | not started |
 | 7 — agent conduct (§10) | not started |
 | 8 — process both rounds, commit the book, write NOTES.md, open the PR | not started |
@@ -271,3 +271,120 @@ page, verified by putting the backslash back and watching it fail.
 See open item 1. He also asked why the suite runs hundreds of tests — he read the count as
 attempts rather than as the size of the suite. Worth stating plainly when reporting: `431 passed`
 is 431 checks, all run every time, not 431 tries.
+
+## 2026-09-04 — Phase 5, and a bug that undid the double-count protection
+
+Branch `feature/zaco-agents-system`, 30 commits ahead of `main`, `main` untouched.
+**506 tests pass**, `ruff check`, `ruff format --check` and `mypy zaco` (strict, 54 files) clean.
+
+### The defect worth reading first
+
+`history()` selected rounds with status `RESOLVED`. Appending sets the status to `APPENDED`. So
+**the moment a round was written into the book it dropped out of the history every later round is
+derived from.** Three consequences, none of which announced themselves:
+
+1. **S5 came back.** The June export reprints May's nectarine dockets verbatim; counted twice the
+   book gains 65 cartons and R3,500 that never happened. That protection is `past.counted`, which
+   was empty. Append May, load June, and the double count returns looking entirely normal.
+2. **Opening stock restarted** at what was sent, though §6 says a consignment does not respect the
+   boundary of an export.
+3. **Account sales the book says were paid read as unpaid**, because `past.settled` was empty — a
+   warning about a state that is not real, which S6 calls worse than no warning.
+
+`rounds_after()` had the same blind spot from the other end. Both now use `SETTLED_STATUSES`.
+Found on the live database, where round 1 is appended and round 2 saw nothing of it. **No
+migration was needed to repair it** — the documents are the record and everything else is
+re-derived (S1), so the same query afterwards saw 7 counted dockets and 4 carried balances.
+
+### What was built
+
+**The workbook page draws the workbook** (open item 1 from the last entry, and Chris's original
+complaint). `read_rows` gained `with_cells=True`, widening `BookRow` to every column keyed by
+**letter** — the operator's own columns have no field name and are as much a part of the row as
+ours. `/workbook` now draws the file first and always; a round is drawn into that same grid,
+beneath a line if it is not yet appended, highlighted in place if it is.
+
+**Phase 5, all of §8.**
+
+- `zaco/money/allocate.py` — largest remainder, so shares sum to the payment *exactly*. Refuses on
+  no rows, all-nought weights, or any negative weight (a row whose returns exceed its sales needs
+  a person, not an apportionment).
+- `zaco/money/deductions.py` — the printed-deductions split. A deduction counts as naming a fruit
+  **only when a product on that same statement carries one of its words**: evidence, not
+  resemblance. 382900 comes out of the real file as 2781.50 / 942.50 = 3724.00 exactly.
+- `zaco/resolve/reconcile.py` — the five states, over the **accumulated record** rather than one
+  round. Per-round reporting called the same account sale unpaid in the round that sold it and
+  unexplained in the round that paid it.
+- `Nett Total` fills. 382880 pays R250 over three rows: 83.34 / 83.33 / 83.33.
+- `zaco/resolve/settle.py` + migration `0005` — suppliers, terms per consignment, payments.
+- `/reconciliation` and `/settlement`. Neither nav entry says "Phase 5" any more.
+
+### Defects found and fixed, beyond the history one
+
+- **An appended round previewed at the wrong rows.** `start = appended.first_row if appended else
+  next_row` — `appended` only exists during a live append, so a GET fell through to the next
+  *free* row. Round 1 occupies 5–9 and was drawn at 10–14, with every formula built for the wrong
+  row, under a button labelled "See what was written". The path had never been reachable until a
+  button was added for it.
+- **Headings over numeric columns were left-aligned.** `td.num` existed; `th.num` did not, so 21
+  headings across five templates asked for right alignment and got the default. Chris spotted it
+  on a screenshot. Nothing in the suite could — a misaligned header renders HTTP 200 with correct
+  bytes, the same blind spot as the stray backslash in Phase 4.
+- **Two pre-existing tests were deleted** by a bad edit while splitting commits: a truncation at a
+  function offset that was mid-file rather than end-of-file. Restored from `6562ce0`. The suite
+  count going 447 → 445 is what caught it.
+
+### Tests written that proved nothing, and were replaced
+
+Recorded because it happened three times and is easy to repeat:
+
+- `assert not (set(shares) & {... if False})` — an intersection with the empty set.
+- A cross-round test comparing two sets that were both empty, because round 1 has no multi-row
+  account sales at all.
+- An overlap test using `/api/rounds/stage`, which does not consult history, so it passed against
+  the bug it was written for.
+
+**Every bug fix since is confirmed by reinstating the bug and watching the test fail.** That is
+now the standing rule; see the `what-tests-to-write` memory.
+
+### Decisions taken that are not in DECISIONS.md
+
+- **A single-row account sale is filled whether or not the two sides agree.** §8's "only fully
+  matched groups are filled" exists to stop untrustworthy *proportions* being used, and one row
+  has none. Withholding it would leave a cell empty over a disagreement about the gross.
+- **A group split across two rounds is never settled twice**, and that falls out of the same rule
+  rather than needing a guard: neither round can see all its rows, so neither fills it.
+- **A levy naming a fruit that is not on the statement spreads generally**, with a note saying so.
+  It has to land somewhere and refusing the round would block real work.
+- **Commission is bounded 0–100.** Outside that is a typing slip that would pay a supplier a
+  negative amount or more than arrived.
+
+### State left behind
+
+- Live database: Chris's rounds 1 (appended), 2 (resolved), 3 (staged) — still the three-way split
+  of one `PersonalTest/round-a` round. **Nothing on his record can reach *Settled*** even with
+  terms, because those rounds carry no payment documents. Suppliers and terms tables are empty; I
+  did not write demonstration data into his database.
+- `workbook/account-sales-book.xlsx` on the volume: 8 rows, round 1 at 5–9. Unchanged this session.
+- Working tree clean, everything pushed.
+
+### What Chris said, that shapes the next session
+
+He asked how hard the Nano Banana mock-ups would be under a React frontend, and chose **phases
+first, frontend after**. When it happens: match that mock-up's layout closely but **keep the
+current colour palette**. The one thing that will not be free is auth — a session cookie with
+`credentials: "same-origin"` needs `credentials: "include"`, `allow_credentials` and
+`SameSite=None; Secure`, or a token flow.
+
+He also relayed that the tester thought unit tests "aren't really needed here", and chose **carry
+on as before** — do not offer to trim or delete the suite again.
+
+### Open items, most important first
+
+1. **Phase 6 is where thresholds get chosen for the first time.** `NOTES.md` currently says none
+   have been picked, and §13 assesses reasoning. Every weight, band and rate needs recording with
+   its argument as it is made, or the note becomes wrong.
+2. **`PersonalTest/README.md` predates Phase 5** and stops at "the queue stops at resolved". Its
+   "what this set does not cover" list is now out of date twice over.
+3. **Chris's split rounds.** Rounds 1 and 2 aside, five files up together — his to do.
+4. `render.py` and `domain/model.py` both expose `display_account_sale`; one delegates.
