@@ -389,12 +389,44 @@ def record_so_far(db: Session) -> StagedRound:
         for number, account_sale in staged.account_sales.items():
             account_sale.source_name = account_sale.source_name or f"round {round_.id}"
             sales.setdefault(number, account_sale)
-        # First sighting wins: what a delivery *sent* is a fact of the delivery, and a later round
-        # reprinting it does not make it a second load.
         for delivery_id, delivery in staged.deliveries.items():
-            deliveries.setdefault(delivery_id, delivery)
+            seen = deliveries.get(delivery_id)
+            if seen is None:
+                deliveries[delivery_id] = delivery
+                continue
+            _absorb(seen, delivery)
 
     return StagedRound(rows=rows, account_sales=sales, deliveries=deliveries)
+
+
+def _absorb(seen: Delivery, later: Delivery) -> None:
+    """Fold a later round's sightings of a delivery into the one already accumulated.
+
+    A consignment sits on the floor until it clears, so it commonly sells in one round and goes
+    on selling in the next -- the cherries, the grapes and the oranges all do in the supplied
+    data. Two things then have to happen at once, and they pull in opposite directions:
+
+    * its **dockets** must accumulate, or the record understates what sold and cuts `last_sold`
+      short. The oranges would report one day on market instead of six, and section 9 asks for
+      exactly that figure.
+    * what it was **sent** must not, or a delivery counted in two rounds doubles (section 3:
+      anything belonging to the delivery is counted once per consignment, never once per row --
+      and a round boundary is not a second load either).
+
+    The dockets arriving here are already deduplicated against everything earlier rounds counted,
+    so a reprinted export adds nothing.
+    """
+    by_id = {c.consignment_id: c for c in seen.consignments if c.consignment_id}
+    for consignment in later.consignments:
+        already = by_id.get(consignment.consignment_id or "")
+        if already is None:
+            seen.consignments.append(consignment)
+            continue
+        already.dockets.extend(consignment.dockets)
+        already.evidence |= consignment.evidence
+        # Kept from the first sighting; a later report restating it is the same load.
+        if already.qty_sent is None:
+            already.qty_sent = consignment.qty_sent
 
 
 def reconciliation(db: Session) -> list[Reconciliation]:
