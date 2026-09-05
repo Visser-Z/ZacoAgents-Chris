@@ -1,0 +1,152 @@
+/* Charts, and the few page controls the ported pages need.
+   Colours come from the tokens `/static/app.css` defines; nothing here invents one. The data-mark
+   colours are not here at all -- they are in `charts/theme.ts`, beside the note saying which of
+   them were run through the validator and against what surface. */
+
+/* --- a chart and its caption ---------------------------------------------------------------- */
+
+.figure {
+  margin: 0 0 1.1rem;
+}
+
+.figure figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 0.6rem;
+  margin-bottom: 0.5rem;
+}
+
+.figure-title {
+  font-weight: 600;
+  font-size: 0.95em;
+}
+
+.figure-note {
+  color: var(--muted);
+  font-size: 0.86em;
+}
+
+/* Words, not an empty plot frame. An empty set of axes reads as a chart that failed rather than
+   as a record with nothing in it yet, and on this system the second is the ordinary case. */
+.figure-empty {
+  margin: 0;
+  padding: 1.1rem 0.9rem;
+  border: 1px dashed var(--line);
+  border-radius: 5px;
+  color: var(--muted);
+  font-size: 0.92em;
+}
+
+/* --- the tooltip ---------------------------------------------------------------------------- */
+
+.chart-tip {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 0.5rem 0.65rem;
+  box-shadow: 0 2px 10px rgba(27, 29, 30, 0.1);
+  font-size: 0.86em;
+  max-width: 22rem;
+}
+
+.chart-tip-head {
+  font-weight: 600;
+  margin-bottom: 0.3rem;
+}
+
+.chart-tip-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 1.2rem;
+  color: var(--muted);
+}
+
+.chart-tip-row .mono {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* --- the band key --------------------------------------------------------------------------- */
+
+.chart-key {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 1.1rem;
+  margin: 0 0 0.9rem;
+  color: var(--muted);
+  font-size: 0.86em;
+}
+
+.chart-key-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.chart-key-swatch {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 2px;
+  flex: 0 0 auto;
+}
+
+/* --- the meter ------------------------------------------------------------------------------ */
+
+.meter-track {
+  height: 0.6rem;
+  border-radius: 999px;
+  background: #e9ecec;
+  overflow: hidden;
+}
+
+.meter-fill {
+  height: 100%;
+  background: #2a78d6;
+  border-radius: 999px;
+}
+
+.meter-caption {
+  margin: 0.5rem 0 0;
+}
+
+/* --- page controls -------------------------------------------------------------------------- */
+
+.picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.8rem;
+}
+
+.picker label {
+  margin: 0;
+}
+
+.picker select,
+.picker input[type="date"] {
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font: inherit;
+  background: #fff;
+}
+
+/* A table wider than the page scrolls inside its own panel. Without this the page itself scrolls
+   sideways and the navigation goes with it. */
+.scroller {
+  overflow-x: auto;
+}
+
+/* Held while the next answer is worked out. The figures on screen are still true -- they are just
+   not the ones that were asked for yet -- so they are dimmed rather than thrown away. */
+.settling {
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settling {
+    transition: none;
+  }
+}

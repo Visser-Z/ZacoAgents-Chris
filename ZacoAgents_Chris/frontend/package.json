@@ -11,9 +11,11 @@
     "types": "openapi-typescript http://localhost:8000/openapi.json -o src/api/schema.d.ts"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.102.8",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
-    "react-router": "^7.18.3"
+    "react-router": "^7.18.3",
+    "recharts": "^3.10.1"
   },
   "devDependencies": {
     "@types/node": "^26.4.1",
