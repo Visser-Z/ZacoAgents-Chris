@@ -43,6 +43,7 @@ const Reconciliation = lazy(() =>
 );
 const Queue = lazy(() => import("./pages/Queue").then((m) => ({ default: m.Queue })));
 const Reports = lazy(() => import("./pages/Reports").then((m) => ({ default: m.Reports })));
+const Workbook = lazy(() => import("./pages/Workbook").then((m) => ({ default: m.Workbook })));
 const Settlement = lazy(() =>
   import("./pages/Settlement").then((m) => ({ default: m.Settlement })),
 );
@@ -57,6 +58,7 @@ const BASENAME = import.meta.env.BASE_URL.replace(/\/$/, "");
 const BUILT: Record<string, ReactElement> = {
   "/rounds": <ReadDocument />,
   "/queue": <Queue />,
+  "/workbook": <Workbook />,
   "/staged": <StageRound />,
   "/reconciliation": <Reconciliation />,
   "/settlement": <Settlement />,
