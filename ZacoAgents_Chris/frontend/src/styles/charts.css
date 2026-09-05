@@ -150,3 +150,88 @@
     transition: none;
   }
 }
+
+/* --- choosing files -------------------------------------------------------------------------- */
+
+/* A real file input, kept reachable rather than hidden with `display: none`. Clipped to a pixel
+   so it takes no space, but still focusable and still announced -- a drop target built out of div
+   handlers alone cannot be tabbed to at all. */
+.dropzone-input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.dropzone {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  position: relative;
+  margin: 0;
+  padding: 1.4rem 1.1rem;
+  border: 1px dashed var(--line);
+  border-radius: 6px;
+  background: #fbfcfc;
+  text-align: center;
+  cursor: pointer;
+  color: var(--ink);
+}
+
+.dropzone:hover,
+.dropzone:focus-within {
+  border-color: var(--accent);
+  background: #f4f8f7;
+}
+
+.dropzone:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.dropzone.over {
+  border-color: var(--accent);
+  border-style: solid;
+  background: #eef4f3;
+}
+
+.dropzone.disabled {
+  cursor: progress;
+  opacity: 0.6;
+}
+
+.dropzone-hint {
+  font-size: 0.88em;
+}
+
+.chosen {
+  list-style: none;
+  margin: 0.7rem 0 0;
+  padding: 0;
+  font-size: 0.92em;
+}
+
+.chosen li {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  padding: 0.25rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.chosen li .link {
+  margin-left: auto;
+  font-size: 0.9em;
+}
+
+/* The delivery's identity, above the consignments on its floor. */
+.delivery-head {
+  display: flex;
+  gap: 1.2rem;
+  flex-wrap: wrap;
+  align-items: baseline;
+}

@@ -25,6 +25,8 @@ import { Login } from "./pages/Login";
 import { NotFound } from "./pages/NotFound";
 import { NotYetBuilt } from "./pages/NotYetBuilt";
 import { Overview } from "./pages/Overview";
+import { ReadDocument } from "./pages/ReadDocument";
+import { StageRound } from "./pages/StageRound";
 
 /**
  * The four pages that draw charts are fetched when one is opened, not before.
@@ -51,6 +53,8 @@ const BASENAME = import.meta.env.BASE_URL.replace(/\/$/, "");
 
 /** The sections that have been rebuilt here. Everything else still points at its twin. */
 const BUILT: Record<string, ReactElement> = {
+  "/rounds": <ReadDocument />,
+  "/staged": <StageRound />,
   "/reconciliation": <Reconciliation />,
   "/settlement": <Settlement />,
   "/reports": <Reports />,
