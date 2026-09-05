@@ -133,3 +133,26 @@ def test_staging_is_gated_on_the_ingest_permission(client: TestClient, db: Sessi
 
 def test_a_signed_out_caller_cannot_stage(client: TestClient) -> None:
     assert _stage(client, ["AccountSales_382405.txt"]).status_code == 401
+
+
+def test_the_rounds_list_reports_the_questions_that_are_actually_open(
+    operator: TestClient,
+) -> None:
+    """The list is the one screen an operator uses to decide what needs attention.
+
+    `open_questions` had no value assigned in the summary, so it took the schema default and every
+    round reported itself clear -- including one with fourteen questions blocking its append.
+    A count that is always nought is worse than no count: it answers the question wrongly instead
+    of leaving it to be asked.
+    """
+    files = [
+        ("files", (n, (DATA / n).read_bytes(), "application/octet-stream")) for n in EVERYTHING
+    ]
+    created = operator.post("/api/rounds", files=files)
+    assert created.status_code == 201, created.text
+    detail = operator.get(f"/api/rounds/{created.json()['summary']['id']}").json()
+
+    listed = operator.get("/api/rounds").json()
+
+    assert int(detail["totals"]["open_questions"]) > 0
+    assert listed[0]["open_questions"] == int(detail["totals"]["open_questions"])

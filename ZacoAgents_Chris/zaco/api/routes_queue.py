@@ -54,7 +54,7 @@ from zaco.ingest.classifier import UnrecognisedDocumentError
 from zaco.resolve import service
 from zaco.resolve.dn import DnProvenance
 from zaco.resolve.queue import Item
-from zaco.resolve.service import ResolvedRound
+from zaco.resolve.service import SETTLED_STATUSES, ResolvedRound
 
 router = APIRouter(prefix="/api/rounds", tags=["resolution"])
 products = APIRouter(prefix="/api/products", tags=["resolution"])
@@ -467,11 +467,26 @@ def resolve(
 # --- rendering ---------------------------------------------------------------------------------
 
 
+def _open_questions(db: Session, round_: Round) -> int:
+    """How many questions this round is still waiting on.
+
+    Re-derived rather than stored, like everything else that is not a document (S1). It costs a
+    full rebuild per round in the list, which is the price of the figure being true: the
+    alternative was the count defaulting to nought, so a round with fourteen questions blocking
+    its append reported itself as clear on the one screen an operator uses to decide what needs
+    attention.
+    """
+    if round_.status in SETTLED_STATUSES:
+        return 0
+    return len(service.load(db, round_).items)
+
+
 def _summary(db: Session, round_: Round) -> RoundSummaryOut:
     documents = (
         db.execute(select(RoundDocument).where(RoundDocument.round_id == round_.id)).scalars().all()
     )
     return RoundSummaryOut(
+        open_questions=_open_questions(db, round_),
         id=round_.id,
         label=round_.label,
         status=round_.status,
