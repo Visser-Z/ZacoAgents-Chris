@@ -20,6 +20,7 @@ import { ACCOUNTS, NAV } from "./nav";
 import { AppShell } from "./components/AppShell";
 import { RequireAuth, RequirePermission } from "./auth/guards";
 import { SessionProvider } from "./auth/session";
+import { ToastHost } from "./components/Toasts";
 import { Accept } from "./pages/Accept";
 import { Login } from "./pages/Login";
 import { NotFound } from "./pages/NotFound";
@@ -40,6 +41,7 @@ const Conduct = lazy(() => import("./pages/Conduct").then((m) => ({ default: m.C
 const Reconciliation = lazy(() =>
   import("./pages/Reconciliation").then((m) => ({ default: m.Reconciliation })),
 );
+const Queue = lazy(() => import("./pages/Queue").then((m) => ({ default: m.Queue })));
 const Reports = lazy(() => import("./pages/Reports").then((m) => ({ default: m.Reports })));
 const Settlement = lazy(() =>
   import("./pages/Settlement").then((m) => ({ default: m.Settlement })),
@@ -54,6 +56,7 @@ const BASENAME = import.meta.env.BASE_URL.replace(/\/$/, "");
 /** The sections that have been rebuilt here. Everything else still points at its twin. */
 const BUILT: Record<string, ReactElement> = {
   "/rounds": <ReadDocument />,
+  "/queue": <Queue />,
   "/staged": <StageRound />,
   "/reconciliation": <Reconciliation />,
   "/settlement": <Settlement />,
@@ -97,39 +100,41 @@ export function App() {
     <QueryClientProvider client={client}>
       <BrowserRouter basename={BASENAME}>
         <SessionProvider>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/accept/:token" element={<Accept />} />
+          <ToastHost>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/accept/:token" element={<Accept />} />
 
-            <Route element={<Shell />}>
-              <Route index element={<Overview />} />
-              {SECTIONS.map((item) => {
-                const page = BUILT[item.path] ?? <NotYetBuilt item={item} />;
-                return (
-                  <Route
-                    key={item.path}
-                    path={item.path}
-                    element={
-                      item.permission ? (
-                        <RequirePermission needed={item.permission}>{page}</RequirePermission>
-                      ) : (
-                        page
-                      )
-                    }
-                  />
-                );
-              })}
-              <Route
-                path={ACCOUNTS.path}
-                element={
-                  <RequirePermission needed="admin">
-                    <NotYetBuilt item={ACCOUNTS} />
-                  </RequirePermission>
-                }
-              />
-              <Route path="*" element={<NotFound />} />
-            </Route>
-          </Routes>
+              <Route element={<Shell />}>
+                <Route index element={<Overview />} />
+                {SECTIONS.map((item) => {
+                  const page = BUILT[item.path] ?? <NotYetBuilt item={item} />;
+                  return (
+                    <Route
+                      key={item.path}
+                      path={item.path}
+                      element={
+                        item.permission ? (
+                          <RequirePermission needed={item.permission}>{page}</RequirePermission>
+                        ) : (
+                          page
+                        )
+                      }
+                    />
+                  );
+                })}
+                <Route
+                  path={ACCOUNTS.path}
+                  element={
+                    <RequirePermission needed="admin">
+                      <NotYetBuilt item={ACCOUNTS} />
+                    </RequirePermission>
+                  }
+                />
+                <Route path="*" element={<NotFound />} />
+              </Route>
+            </Routes>
+          </ToastHost>
         </SessionProvider>
       </BrowserRouter>
     </QueryClientProvider>
