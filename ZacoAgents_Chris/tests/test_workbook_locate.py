@@ -16,7 +16,10 @@ from openpyxl import Workbook
 from zaco.resolve import book as book_reader
 from zaco.workbook.locate import WorkbookShapeError, locate, read_rows
 
-LIVE = Path(__file__).resolve().parent.parent / "workbook" / "account-sales-book.xlsx"
+#: The operator's book as it stood before this system touched it. Deliberately not
+#: `workbook/account-sales-book.xlsx`: that file is a deliverable committed with both rounds
+#: processed into it, so it grows. A fixture that moves is not a fixture.
+LIVE = Path(__file__).resolve().parent / "fixtures" / "account-sales-book.pristine.xlsx"
 
 
 def test_the_data_sheet_is_found_even_though_it_is_third() -> None:

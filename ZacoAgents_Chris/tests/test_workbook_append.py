@@ -31,7 +31,10 @@ from zaco.workbook.append import (
 from zaco.workbook.locate import WorkbookShapeError, locate
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-LIVE = REPO_ROOT / "workbook" / "account-sales-book.xlsx"
+#: The operator's book as it stood before this system touched it. Deliberately not
+#: `workbook/account-sales-book.xlsx`: that file is a deliverable committed with both rounds
+#: processed into it, so it grows. A fixture that moves is not a fixture.
+LIVE = Path(__file__).resolve().parent / "fixtures" / "account-sales-book.pristine.xlsx"
 
 #: The letters the real book actually uses. Not the brief's.
 REAL = {

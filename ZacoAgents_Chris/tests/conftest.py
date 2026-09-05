@@ -21,6 +21,14 @@ from sqlalchemy.orm import Session
 ADMIN_EMAIL = "admin@example.com"
 ADMIN_PASSWORD = "seeded-admin-password"
 
+# The operator's book **as it was before this system touched it** -- three rows, the 14xxx series
+# ending at 14692. It is a copy kept under `tests/`, not `workbook/account-sales-book.xlsx`,
+# because that file is a *deliverable*: the brief asks for it committed with both rounds processed
+# into it, so it grows every time the system does its job. A fixture that moves is not a fixture,
+# and pointing the suite at it made "rows go beneath what is already there" a claim about
+# whatever happened to be there last.
+PRISTINE_BOOK = Path(__file__).resolve().parent / "fixtures" / "account-sales-book.pristine.xlsx"
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -35,13 +43,15 @@ def _configure_environment(tmp_root: Path) -> None:
     os.environ["BACKUP_DIR"] = str(tmp_root / "backups")
     os.environ.setdefault("ALLOWED_EMAIL_DOMAINS", "")
 
-    # A copy of the operator's real book, never the original. Phase 3 reads it for the delivery
-    # notes already linked to account sales and for where the 14xxx series sits; Phase 4 appends
-    # to it. Tests that touched the real file would be one bug away from destroying the
-    # deliverable, so the fixture copies it and the copy is what everything writes to.
+    # A copy of the operator's book as it stood before this system touched it, never the file in
+    # `workbook/`. Phase 3 reads it for the delivery notes already linked to account sales and for
+    # where the 14xxx series sits; Phase 4 appends to it. Two reasons for the copy: a test that
+    # touched the real file would be one bug away from destroying the deliverable, and the
+    # deliverable *grows* -- it is committed with both rounds processed into it -- so a suite
+    # pinned to it would be asserting against whatever was appended last.
     workbook = tmp_root / "workbook"
     workbook.mkdir(parents=True, exist_ok=True)
-    shutil.copy(REPO_ROOT / "workbook" / "account-sales-book.xlsx", workbook)
+    shutil.copy(PRISTINE_BOOK, workbook / "account-sales-book.xlsx")
 
     from zaco.config import get_settings
 
