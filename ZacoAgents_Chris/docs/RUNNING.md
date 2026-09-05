@@ -33,6 +33,22 @@ delivery note series has somewhere to come from on the very first round. It neve
 book that is already there: that file is what the business settles money against, and clobbering
 it on a restart would be the worst thing this system could do.
 
+### After you change the code
+
+```
+docker compose up -d --build app
+```
+
+`docker compose restart app` is **not** enough, and the way it fails is quiet. The image copies
+the source in at build time rather than mounting the working tree, so a restarted container comes
+back running whatever was baked into the image it already has. Nothing errors. The old code
+serves happily, and a brand new route simply 404s as though it had never been registered -- which
+reads exactly like a mistake in the code you just wrote.
+
+That trade is deliberate: the image is the same one hosting runs, so what is tested locally is
+what ships (D3). The cost is this one command, and knowing that a change which seems not to have
+taken usually has, into a file nothing is running.
+
 ### About the sidecar
 
 It is parity, not the guarantee. The snapshot that actually protects the workbook is taken
