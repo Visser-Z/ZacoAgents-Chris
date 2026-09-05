@@ -376,3 +376,20 @@ td.finding-quiet {
 /* A grid heading over a column of figures is right-aligned with them. The letter still comes
    first, so the header row reads the way a spreadsheet's does. */
 table.grid thead th.num { text-align: right; }
+
+/* The value bands. Colour carries the order -- the vital few darkest, the long tail palest -- so
+   the ranking is legible before the letters are read. */
+.chip.band-A { background: #dfeee7; border-color: #7fb7a1; color: #15503f; font-weight: 700; }
+.chip.band-B { background: #eef4ef; border-color: #a9c6b6; color: #38614f; }
+.chip.band-C { background: transparent; border-style: dashed; color: var(--muted); }
+.chip.band-unbanded { background: transparent; border-style: dashed; color: var(--muted); }
+
+#picker select, #picker input[type="text"] {
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font: inherit;
+  background: #fff;
+  margin-right: 0.6rem;
+}
+#picker button { margin-top: 0.75rem; }

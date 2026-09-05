@@ -1,0 +1,185 @@
+{% extends "base.html" %}
+{% block title %}Reports{% endblock %}
+{% block main_class %}wide{% endblock %}
+
+{% block content %}
+<h1>Reports</h1>
+<p class="lede">Over the whole recorded history, or a month, or a week. Every figure is worked out
+  from the documents on read, so the same history gives the same answer, and everything a score
+  rests on is shown beside it.</p>
+
+<div class="panel" id="picker">
+  <label for="period">Period</label>
+  <select id="period">
+    <option value="all">All time</option>
+    <option value="month">A month</option>
+    <option value="week">A week</option>
+  </select>
+  <label for="on" id="on-label" hidden>The day it sits around</label>
+  <input id="on" type="text" placeholder="YYYY-MM-DD" hidden>
+  <button id="go">Show</button>
+</div>
+
+<div id="report"></div>
+
+<script>
+(() => {
+  const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+  const box = document.getElementById("report");
+  const period = document.getElementById("period");
+  const on = document.getElementById("on");
+  const onLabel = document.getElementById("on-label");
+
+  const dash = (v) => (v === null || v === undefined || v === "" ? "-" : esc(v));
+
+  async function json(url) {
+    const response = await fetch(url, { credentials: "same-origin" });
+    const payload = await response.json().catch(() => null);
+    if (!response.ok) {
+      const d = payload && payload.detail;
+      throw new Error(typeof d === "string" ? d : `Failed (${response.status})`);
+    }
+    return payload;
+  }
+
+  period.addEventListener("change", () => {
+    const needsDay = period.value !== "all";
+    on.hidden = !needsDay;
+    onLabel.hidden = !needsDay;
+  });
+
+  // A caveat is not a footnote. Section 10's rule -- a conclusion travels with the figures --
+  // applies here too, so these sit above the numbers they qualify rather than under them.
+  function caveats(d) {
+    if (!d.caveats.length) return "";
+    return `<div class="warning"><strong>What these figures do not say</strong>
+      <ul style="margin:.4rem 0 0;padding-left:1.1rem">
+        ${d.caveats.map((c) => `<li>${esc(c)}</li>`).join("")}
+      </ul></div>`;
+  }
+
+  function headline(h) {
+    return `
+      <h2>Headline</h2>
+      <div class="panel"><table><tbody>
+        <tr><td>Cartons sold</td><td class="num mono">${dash(h.cartons_sold)}</td></tr>
+        <tr><td>Came back</td><td class="num mono">${h.cartons_returned === null
+          ? '<span class="chip">not reported</span>' : esc(h.cartons_returned)}</td></tr>
+        <tr><td>Net</td><td class="num mono"><strong>${dash(h.cartons_net)}</strong></td></tr>
+        <tr><td>Takings</td><td class="num mono"><strong>${dash(h.takings)}</strong></td></tr>
+        <tr><td>A carton fetched</td><td class="num mono">${dash(h.price_per_carton)}</td></tr>
+        <tr><td>Return rate</td><td class="num mono">${dash(h.return_rate)}</td></tr>
+      </tbody></table>
+      <p class="muted" style="margin:.6rem 0 0">${esc(h.return_rate_basis)}</p>
+      ${h.not_yet_paid && h.not_yet_paid !== "R0.00"
+        ? `<p class="muted" style="margin:.35rem 0 0">Of the takings, ${esc(h.not_yet_paid)}
+             is not yet in any payment run &mdash; it sold, and it has not arrived.</p>` : ""}
+      </div>`;
+  }
+
+  function products(d) {
+    if (!d.products.length) return `<h2>Products</h2><p class="muted">Nothing sold in this period.</p>`;
+    const bandsShown = [...new Set(d.products.map((p) => p.band))];
+    return `
+      <h2>Products <span class="muted">(${d.products.length}, by value)</span></h2>
+      <div class="panel"><table>
+        <thead><tr>
+          <th>Band</th><th>Product</th><th>Code</th>
+          <th class="num">Share</th><th class="num">Value</th>
+          <th class="num">A carton</th><th class="num">Net</th>
+          <th class="num">Sent</th><th class="num">Sell-through</th><th class="num">Days</th>
+        </tr></thead>
+        <tbody>${d.products.map((p) => `<tr>
+          <td><span class="chip band-${esc(p.band)}">${esc(p.band)}</span></td>
+          <td>${esc(p.product)}</td>
+          <td class="mono muted">${dash(p.short_code)}</td>
+          <td class="num">${dash(p.share_of_value)}</td>
+          <td class="num mono">${dash(p.value)}</td>
+          <td class="num mono">${dash(p.price_per_carton)}</td>
+          <td class="num">${dash(p.cartons_net)}</td>
+          <td class="num">${p.cartons_sent === null
+            ? '<span class="chip">not reported</span>' : esc(p.cartons_sent)}</td>
+          <td class="num">${dash(p.sell_through)}</td>
+          <td class="num">${p.days_on_market === null ? "-" : esc(p.days_on_market)}</td>
+        </tr>`).join("")}</tbody>
+      </table>
+      <p class="muted" style="font-size:.9em;margin:.6rem 0 0">
+        ${bandsShown.map((b) => `<strong>${esc(b)}</strong> &mdash; ${esc(d.bands[b] || "")}`).join(" &nbsp;&middot;&nbsp; ")}
+        <br>Sent, sell-through and days on market belong to the delivery, so they cover each
+        consignment's whole life and are counted once per consignment &mdash; never per row.</p>
+      </div>`;
+  }
+
+  function totals(title, rows, what) {
+    if (!rows.length) return "";
+    return `
+      <h2>By ${esc(title)}</h2>
+      <div class="panel"><table>
+        <thead><tr><th>${esc(what)}</th><th class="num">Value</th>
+          <th class="num">Net cartons</th><th class="num">Consignments</th></tr></thead>
+        <tbody>${rows.map((t) => `<tr>
+          <td>${esc(t.name)}</td>
+          <td class="num mono">${esc(t.value)}</td>
+          <td class="num">${esc(t.cartons_net)}</td>
+          <td class="num muted">${t.consignments}</td>
+        </tr>`).join("")}</tbody>
+      </table></div>`;
+  }
+
+  function takeOn(d) {
+    if (!d.take_on.length) return "";
+    return `
+      <h2>What to take on again</h2>
+      <div class="panel">
+        <p class="muted" style="margin:0 0 .6rem"><strong>Ranked on:</strong> ${esc(d.take_on_basis)}.
+          The denominator is what was <em>sent</em>, not what sold &mdash; nothing is bought here,
+          and what is scarce is the market slot and the handling spent on produce that then fails
+          to move.${d.commission_coverage
+            ? ` <br><strong>Coverage:</strong> ${esc(d.commission_coverage)}` : ""}</p>
+        <table>
+          <thead><tr><th>Product</th><th class="num">Per carton sent</th>
+            <th class="num">Sent</th><th class="num">Sell-through</th>
+            <th class="num">Came back</th><th class="num">Value</th>
+            <th class="num">Zaco earned</th></tr></thead>
+          <tbody>${d.take_on.map((t) => `<tr>
+            <td>${esc(t.product)}</td>
+            <td class="num mono"><strong>${dash(t.per_carton_sent)}</strong></td>
+            <td class="num">${dash(t.cartons_sent)}</td>
+            <td class="num">${dash(t.sell_through)}</td>
+            <td class="num">${dash(t.return_rate)}</td>
+            <td class="num mono">${dash(t.value)}</td>
+            <td class="num mono">${dash(t.earned)}</td>
+          </tr>
+          ${t.note ? `<tr><td></td><td colspan="6" class="finding-quiet">${esc(t.note)}</td></tr>` : ""}`).join("")}</tbody>
+        </table>
+      </div>`;
+  }
+
+  async function load() {
+    const which = period.value;
+    const day = on.value.trim();
+    let url = `/api/reports?period=${encodeURIComponent(which)}`;
+    if (which !== "all" && day) url += `&on=${encodeURIComponent(day)}`;
+    try {
+      const d = await json(url);
+      box.innerHTML = `
+        <h2 style="margin-top:1.5rem">${esc(d.period)}
+          <span class="muted">&mdash; ${d.headline.docket_count} sale(s)</span></h2>
+        ${caveats(d)}
+        ${headline(d.headline)}
+        ${products(d)}
+        ${totals("agent", d.agents, "Agent")}
+        ${totals("market", d.markets, "Market")}
+        ${takeOn(d)}`;
+    } catch (e) {
+      box.innerHTML = `<div class="error">${esc(e.message)}</div>`;
+    }
+  }
+
+  document.getElementById("go").addEventListener("click", load);
+  load();
+})();
+</script>
+{% endblock %}

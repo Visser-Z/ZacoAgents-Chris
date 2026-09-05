@@ -22,6 +22,7 @@ from zaco.api import (
     routes_health,
     routes_ingest,
     routes_queue,
+    routes_reports,
     routes_rounds,
     routes_settlement,
     routes_workbook,
@@ -124,6 +125,7 @@ def create_app() -> FastAPI:
     app.include_router(routes_workbook.rounds)
     app.include_router(routes_workbook.board)
     app.include_router(routes_settlement.router)
+    app.include_router(routes_reports.router)
     app.include_router(routes_queue.products)
     app.include_router(web_routes.router)
 

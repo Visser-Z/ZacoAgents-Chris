@@ -41,6 +41,7 @@ from zaco.domain.build import build_round, load_short_codes
 from zaco.domain.model import ZERO, AccountSale, Delivery, Row, StagedRound
 from zaco.domain.products import ProductRegistry, Vocabulary, normalise
 from zaco.ingest.classifier import UnrecognisedDocumentError, read_document
+from zaco.reporting.reports import ALL_TIME, Period, Report, build
 from zaco.resolve import book as book_reader
 from zaco.resolve import queue as queue_builder
 from zaco.resolve.book import BookKnowledge
@@ -454,6 +455,29 @@ def settlement(db: Session) -> Settlement:
         for term in db.execute(select(CommissionTerm)).scalars()
     }
     return settle(combined, terms, agreed, paid)
+
+
+def earnings_by_product(db: Session) -> tuple[dict[str, Decimal], str]:
+    """What Zaco actually earned per product, and over how much of the business (section 9).
+
+    Only the consignments that can be settled contribute -- one with no agreed commission earns
+    nothing this system can state, and one whose payment does not reconcile has no Nett to take a
+    percentage of. The coverage sentence travels with the figures, because commission over a
+    fifth of the business is a useful number only if you know it is a fifth.
+    """
+    found = settlement(db)
+    earned: dict[str, Decimal] = {}
+    for line in found.settled:
+        if line.zaco_keeps is None:
+            continue
+        earned[line.product] = earned.get(line.product, ZERO) + line.zaco_keeps
+    return earned, found.coverage
+
+
+def report(db: Session, period: Period | None = None) -> tuple[Report, str]:
+    """Section 9 over the whole record, ranked on realised earnings wherever terms exist."""
+    earned, coverage = earnings_by_product(db)
+    return build(record_so_far(db), period or ALL_TIME, earned or None), coverage
 
 
 def load(db: Session, round_: Round) -> ResolvedRound:

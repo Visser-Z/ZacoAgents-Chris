@@ -684,3 +684,81 @@ class SettlementOut(BaseModel):
 
     suppliers: list[SupplierOut] = Field(default_factory=list)
     terms: list[TermsOut] = Field(default_factory=list)
+
+
+# --- Reporting (Phase 6) ----------------------------------------------------------------------
+
+
+class HeadlineOut(BaseModel):
+    """Cartons and takings, with the return rate's denominator stated beside it (section 9)."""
+
+    cartons_sold: str
+    cartons_returned: str | None = None
+    """`None` where no source could express a return. Absent is not zero (section 6)."""
+
+    cartons_net: str
+    takings: str
+    not_yet_paid: str
+    price_per_carton: str | None = None
+    return_rate: str | None = None
+    return_rate_basis: str = ""
+    consignments_that_cannot_report_returns: int = 0
+    docket_count: int = 0
+
+
+class ProductLineOut(BaseModel):
+    """One product over the period. Sell-through and days are the consignment's, not the row's."""
+
+    product: str
+    short_code: str | None = None
+    band: str
+    share_of_value: str
+    value: str
+    cartons_sold: str
+    cartons_returned: str | None = None
+    cartons_net: str
+    price_per_carton: str | None = None
+    cartons_sent: str | None = None
+    sell_through: str | None = None
+    days_on_market: int | None = None
+    consignments: int = 0
+
+
+class GroupTotalOut(BaseModel):
+    name: str
+    cartons_net: str
+    value: str
+    consignments: int = 0
+
+
+class TakeOnOut(BaseModel):
+    """One line ranked by what it returned for each carton committed to it."""
+
+    product: str
+    per_carton_sent: str | None = None
+    cartons_sent: str | None = None
+    sell_through: str | None = None
+    return_rate: str | None = None
+    value: str
+    earned: str | None = None
+    note: str = ""
+
+
+class ReportOut(BaseModel):
+    """Section 9 over one period, with what it cannot stand behind carried alongside."""
+
+    period: str
+    is_all_time: bool = True
+    start: date | None = None
+    end: date | None = None
+    headline: HeadlineOut
+    products: list[ProductLineOut] = Field(default_factory=list)
+    markets: list[GroupTotalOut] = Field(default_factory=list)
+    agents: list[GroupTotalOut] = Field(default_factory=list)
+    take_on: list[TakeOnOut] = Field(default_factory=list)
+    take_on_basis: str = ""
+    commission_coverage: str = ""
+    """What share of the business the earnings figures speak for. Always shown beside them."""
+
+    caveats: list[str] = Field(default_factory=list)
+    bands: dict[str, str] = Field(default_factory=dict)
