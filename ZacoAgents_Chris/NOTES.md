@@ -24,6 +24,13 @@ those are the part no document contains, and each carries the person who gave it
 Money is `Decimal` end to end, `NUMERIC(14,2)` in Postgres, and crosses the wire as a **string** so
 no client can turn it into a float.
 
+On top of that record: a **reconciliation** board with five distinguishable states, a
+largest-remainder **allocator** so a payment split across rows sums to the payment exactly, a
+**settlement** view that refuses to produce a figure for a consignment with no agreed commission,
+**reporting** over all time or a month or a week, and an **agent conduct** panel. The last three
+all run over the accumulated record rather than one round, because an agent's normal and a
+business's opening stock are exactly the things a single round is too small to establish.
+
 ## Calls I made, and why
 
 **The DN is never taken from the agent's `DELIVERY NOTE NO` field.** That field is in the agent's
@@ -59,8 +66,41 @@ gaps to fill later leaves a half-written row in the live book.
 thing: a visible, editable suggestion in a spreadsheet cell. A default in a payable is a
 fabrication.
 
-I have **not** yet chosen any threshold, weight or banding, because §9 and §10 are not built. Where
-the system would need one today it refuses instead.
+**Every threshold, with its argument.** §9 and §13 both ask for these, so each is a named constant
+sitting next to the reason for it rather than a number inside an expression.
+
+- **The return rate is returned over cartons *sold*, not net.** If 100 sold and 20 came back, the
+  share of sales that reversed is 20%, not the 25% that 20/80 gives. The denominator is printed
+  beside the rate, because the two are different claims and a reader cannot tell them apart unaided.
+- **Product bands are cumulative-value Pareto at 80% and 95%**, recomputed from the data every
+  time rather than fixed at "top 5". **Under five lines nothing is banded at all**: three lines
+  cannot have a vital few, and banding them dresses an arbitrary cut as a finding.
+- **"What to take on" ranks on one ratio, not a blend** — money per carton *sent*, not per carton
+  sold. Nothing is bought here, so what is scarce is the market slot and the handling spent on
+  produce that then fails to move. One ratio traces to the figures beside it in a way a weighting
+  of three signals does not. It switches to what Zaco actually earned the moment terms exist, and
+  says which of the two it used.
+- **Conduct is judged against the median of this business's own record, not the mean.** The mean
+  share kept across the supplied rounds is 17.4% against a median of 15.0%, because AccSale
+  382875's 60% is already inside the mean. A yardstick partly made of the outlier it is meant to
+  expose is the wrong yardstick.
+- **The normal is the whole business's, not each agent's own.** An agent measured against their own
+  history is their own yardstick, so one who has always kept too much looks perfectly typical.
+  Where the record holds one agent, that agent defines the normal and the panel says so.
+- **A share kept is flagged at half again the normal**, relative rather than in percentage points:
+  a business normally paying 5% and one paying 30% cannot share a band measured in points. On this
+  record it flags 382875 alone. The two sales modestly above normal are keeping R5 and R13.70 more
+  than normal on small sales, which a fixed handling charge explains.
+- **Under five observations, nothing is judged**, and the panel gives that as the reason. §10 says
+  not to judge on a sample too small to have a normal, and silence there would read as a pass.
+- **A consignment that last sold within two days of the end of the record is treated as still
+  selling** and set aside from "what never sold". One consignment of oranges last sold on the final
+  day the record covers with 120 of 200 cartons unsold — four fifths of everything its agent had
+  not shifted. Counting those as produce that failed to move says something false about fruit that
+  is simply still on the floor.
+
+The flagging threshold governs **emphasis, never visibility**: every account sale is listed either
+way, because how ordinary the ordinary ones are is the entire basis for the comparison.
 
 ## What I found in the data
 
@@ -98,19 +138,30 @@ the system would need one today it refuses instead.
 14. **`openpyxl` converts a `Decimal` to a float on the way into the file.** 400 ÷ 3 was stored as
     `133.33333333333331`. Prices are rounded to the five decimals the column already displays, and
     a row whose money no longer divides says so.
-15. **No formula in the supplied book has a cached result** — not even the pre-existing rows. The
+15. **A sale and its payment can land in different rounds.** `JOH*SUB*5644210/1` sells in round 1
+    and is not accounted for by any payment document until round 2. At append time the honest
+    answer for its Nett was "not known", so the cell was left blank with the reason recorded —
+    and the row is now permanently blank in the book even though the record has since learned the
+    figure. See *What I did not do*.
+16. **No formula in the supplied book has a cached result** — not even the pre-existing rows. The
     file has never been opened and saved by Excel, so the formulas have never been calculated.
 
 ## What I did not do
 
-**§8 reconciliation, the Nett split and settlement; §9 reporting; §10 agent conduct.** They are
-designed, not built. The consequence is visible rather than hidden: where an account sale settles
-one row the Nett is written, and where it covers several the cell is **blank** and the grid says
-`SPLIT ACROSS N ROWS`, because apportioning it must sum to the payment exactly and that is §8's
-job. I would build that next — the largest-remainder allocator and the printed-deductions split
-are where the money stops being merely parsed and starts being owed.
+**A row appended before its payment arrives is never revisited.** `JOH*SUB*5644210/1` sold in
+round 1, so row 11 of the committed book has a blank `Nett Total`; its payment arrived in round 2
+and the reconciliation board now shows it settled at R1,500 with a Nett of R1,275. Both halves are
+correct on their own and nothing joins them. Not rewriting an appended row is deliberate — the
+book is the operator's and the system's whole claim is that it does not disturb it — but the
+missing piece is a screen that says *these appended rows have a blank the record can now fill*,
+offering it as a fresh append rather than an edit. That is the first thing I would build next: it
+is R1,275 the operator would otherwise have to notice by hand.
 
-Also not done: hosting (the stack runs locally end to end; `render.yaml` is written, unexercised).
+**Hosting.** The stack runs locally end to end; `render.yaml` is written and unexercised.
+
+**A considered interface.** The pages are plain by choice — §12 says a plain one showing the right
+figures beats a handsome one showing the wrong ones — but plain is not the same as designed, and I
+would not claim the second.
 
 ## What I am unsure of
 
@@ -124,4 +175,12 @@ Also not done: hosting (the stack runs locally end to end; `render.yaml` is writ
 - **The market for the Subtropico block in round 1**, where the header reads `Destination`. It is
   recovered from a sibling report keyed on agent where one exists, and left empty and flagged
   where none does.
+- **Six of the product short codes in column G are mine, not the operator's.**
+  `lookup/product-codes.json` carries two; the rest — `Golden Del 12.5kg`, `Crimson Grapes 5kg`,
+  `Valencia 15kg`, `Angelino 5kg`, `Star Ruby 15kg`, `Hass Avo 4kg`, `Packhams 12.5kg`,
+  `Peaches 5kg`, `Strawberries 250g` — no supplied document contains, and the queue is right to
+  block until someone gives them. I answered as the operator would have to. They follow the shape
+  of the existing rows but deliberately drop their `Imp` prefix, which reads as *imported* and is
+  a claim nothing in the data supports. Every one is a label, not a figure: none of them touches
+  the money.
 - **How the system actually suposed to look like** I should have done more reaserch on how this type of system looks, but was to earger to start working on it.
