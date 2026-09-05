@@ -1,52 +1,82 @@
 /**
- * Step 2 is the toolchain, not the interface. This page exists to prove the chain end to end --
- * the build, the mount under /app, the session cookie reaching the API, and the generated types
- * describing what comes back. The shell replaces it in step 3.
+ * The routes.
+ *
+ * Mounted under `/app` while the Jinja interface still owns `/`, `/login`, `/queue` and the rest;
+ * the two would collide otherwise. The prefix comes from Vite's `base` rather than being written
+ * out, so the last step of the port -- moving this app to `/` -- is a change to one build setting
+ * and not a search through the source for a string.
+ *
+ * The eight sections are generated from the same `NAV` the sidebar is drawn from. That is on
+ * purpose: a route the navigation does not offer, or an item that leads nowhere, is exactly the
+ * kind of drift that appears when the two lists are maintained separately.
  */
 
-import { useEffect, useState } from "react";
+import { BrowserRouter, Outlet, Route, Routes } from "react-router";
 
-import { ApiError, api, type Schemas } from "./api/client";
+import { ACCOUNTS, NAV } from "./nav";
+import { AppShell } from "./components/AppShell";
+import { RequireAuth, RequirePermission } from "./auth/guards";
+import { SessionProvider } from "./auth/session";
+import { Accept } from "./pages/Accept";
+import { Login } from "./pages/Login";
+import { NotFound } from "./pages/NotFound";
+import { NotYetBuilt } from "./pages/NotYetBuilt";
+import { Overview } from "./pages/Overview";
 
-type User = Schemas["UserOut"];
+import "./styles/shell.css";
+
+/** Vite writes `/app/`; the router wants it without the trailing slash. */
+const BASENAME = import.meta.env.BASE_URL.replace(/\/$/, "");
+
+const SECTIONS = NAV.filter((item) => item.path !== "/");
+
+function Shell() {
+  return (
+    <RequireAuth>
+      <AppShell>
+        <Outlet />
+      </AppShell>
+    </RequireAuth>
+  );
+}
 
 export function App() {
-  const [user, setUser] = useState<User | null>(null);
-  const [problem, setProblem] = useState<string | null>(null);
-
-  useEffect(() => {
-    api
-      .get<User>("/api/auth/me")
-      .then(setUser)
-      .catch((error: unknown) => {
-        if (error instanceof ApiError && error.isUnauthenticated) {
-          setProblem("Not signed in. Sign in on the current interface, then reload this page.");
-          return;
-        }
-        setProblem(error instanceof Error ? error.message : String(error));
-      });
-  }, []);
-
   return (
-    <main className="narrow">
-      <h1>Zaco</h1>
-      <p className="lede">
-        The React interface, being built alongside the one at <a href="/">/</a>. Nothing here
-        replaces that yet.
-      </p>
+    <BrowserRouter basename={BASENAME}>
+      <SessionProvider>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route path="/accept/:token" element={<Accept />} />
 
-      {problem ? <div className="error">{problem}</div> : null}
-
-      {user ? (
-        <div className="panel">
-          <p>
-            Signed in as <strong>{user.display_name ?? user.email}</strong>.
-          </p>
-          <p className="muted" style={{ marginBottom: 0 }}>
-            {user.permissions.length} permission(s): {user.permissions.join(", ")}
-          </p>
-        </div>
-      ) : null}
-    </main>
+          <Route element={<Shell />}>
+            <Route index element={<Overview />} />
+            {SECTIONS.map((item) => (
+              <Route
+                key={item.path}
+                path={item.path}
+                element={
+                  item.permission ? (
+                    <RequirePermission needed={item.permission}>
+                      <NotYetBuilt item={item} />
+                    </RequirePermission>
+                  ) : (
+                    <NotYetBuilt item={item} />
+                  )
+                }
+              />
+            ))}
+            <Route
+              path={ACCOUNTS.path}
+              element={
+                <RequirePermission needed="admin">
+                  <NotYetBuilt item={ACCOUNTS} />
+                </RequirePermission>
+              }
+            />
+            <Route path="*" element={<NotFound />} />
+          </Route>
+        </Routes>
+      </SessionProvider>
+    </BrowserRouter>
   );
 }

@@ -1,0 +1,311 @@
+/* The shell: a left sidebar and the page beside it.
+   Colours are the ones already in `/static/app.css` -- this file adds no palette, only layout.
+   It is loaded on top of that stylesheet and reads its custom properties, so the two interfaces
+   cannot drift apart in colour while both exist.
+
+   Deliberately light throughout. There is no dark theme and no `prefers-color-scheme` block:
+   a second palette is a second set of contrast decisions, and none of it has been checked. */
+
+.shell {
+  --side-width: 15.5rem;
+  --side-hover: #f1f4f4;
+  --side-active: #eef4f3;
+  display: flex;
+  align-items: flex-start;
+  min-height: 100dvh;
+}
+
+.shell.railed {
+  --side-width: 3.75rem;
+}
+
+.sidebar {
+  position: sticky;
+  top: 0;
+  z-index: 40;
+  flex: 0 0 var(--side-width);
+  width: var(--side-width);
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--panel);
+  border-right: 1px solid var(--line);
+  overflow: hidden;
+  transition:
+    flex-basis 0.16s ease,
+    width 0.16s ease;
+}
+
+/* The page column. `min-width: 0` is load-bearing rather than tidy: without it a flex item
+   refuses to shrink below the width of its content, so the workbook's 23-column grid would push
+   the whole layout wider than the window instead of scrolling inside its own panel. */
+.shell-body {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* --- the sidebar's three parts ------------------------------------------------------------- */
+
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.7rem 0.65rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.sidebar .brand {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.brand-mark {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 5px;
+  background: var(--accent);
+  color: #fff;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.side-nav {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0.6rem 0.5rem;
+}
+
+.sidebar-foot {
+  border-top: 1px solid var(--line);
+  padding: 0.5rem 0.5rem 0.6rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+/* --- items --------------------------------------------------------------------------------- */
+
+/* Some of these are links and some are buttons; app.css styles every bare `button` as a filled
+   accent control, which is right for a form and wrong for a row in a menu. */
+.side-link {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  margin: 0;
+  padding: 0.48rem 0.6rem;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.94em;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.side-link:hover {
+  background: var(--side-hover);
+}
+
+.side-link[aria-current="page"] {
+  background: var(--side-active);
+  color: var(--accent);
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.side-link .icon {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+.side-link[aria-current="page"] .icon {
+  color: var(--accent);
+}
+
+.side-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.whoami {
+  padding: 0.5rem 0.6rem 0.15rem;
+  color: var(--muted);
+  font-size: 0.86em;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.whoami .side-label {
+  display: block;
+}
+
+.icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0.35rem;
+  border: none;
+  border-radius: 4px;
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.icon-button:hover {
+  background: var(--side-hover);
+  color: var(--ink);
+}
+
+.rail-toggle {
+  align-self: flex-end;
+}
+
+/* --- collapsed to a rail ------------------------------------------------------------------- */
+
+.railed .side-label,
+.railed .whoami {
+  display: none;
+}
+
+.railed .side-link,
+.railed .sidebar .brand {
+  justify-content: center;
+  gap: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.railed .rail-toggle {
+  align-self: center;
+}
+
+/* --- the top bar, which only exists on narrow screens --------------------------------------- */
+
+.shell-topbar {
+  display: none;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.55rem 0.85rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+}
+
+.shell-topbar .brand {
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 35;
+  background: rgba(27, 29, 30, 0.4);
+}
+
+.drawer-only {
+  display: none;
+}
+
+/* --- under 48rem the sidebar is a drawer over the page -------------------------------------- */
+
+@media (max-width: 47.999em) {
+  .shell {
+    display: block;
+  }
+
+  .shell-topbar {
+    display: flex;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+  }
+
+  /* The remembered rail width does not apply here: a 3.75rem drawer would be a rail floating over
+     the page, which is neither of the two things this is meant to be. */
+  .shell.railed,
+  .shell {
+    --side-width: 16.5rem;
+  }
+
+  .sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    width: var(--side-width);
+    transform: translateX(-100%);
+    box-shadow: 0 0 2rem rgba(27, 29, 30, 0.18);
+    transition: transform 0.18s ease;
+  }
+
+  .sidebar.open {
+    transform: none;
+  }
+
+  .railed .side-label,
+  .railed .whoami {
+    display: revert;
+  }
+
+  .railed .side-link,
+  .railed .sidebar .brand {
+    justify-content: flex-start;
+    gap: 0.7rem;
+    padding-left: 0.6rem;
+    padding-right: 0.6rem;
+  }
+
+  .rail-toggle {
+    display: none;
+  }
+
+  .drawer-only {
+    display: inline-flex;
+  }
+
+  main {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}
+
+/* --- the wait before the shell knows who you are -------------------------------------------- */
+
+/* Deliberately empty. What goes here is either the app or a redirect to the login page, and a
+   skeleton of the first is a glimpse of somewhere you may not be going. */
+.checking {
+  min-height: 60dvh;
+}
+
+/* --- focus and motion ----------------------------------------------------------------------- */
+
+.side-link:focus-visible,
+.icon-button:focus-visible,
+.brand:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sidebar {
+    transition: none;
+  }
+}

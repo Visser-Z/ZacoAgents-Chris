@@ -67,7 +67,37 @@ function validationMessage(detail: unknown): string | null {
   return field ? `${String(field)}: ${first.msg}` : first.msg;
 }
 
-async function refuse(response: Response): Promise<never> {
+/**
+ * Told when the API says there is no session, so the shell can send the viewer to sign in.
+ *
+ * Every page will eventually read something, and a session that expired between two reads is
+ * reported by whichever request happened to be in flight -- not by the one place that would know
+ * to act on it. Broadcasting it once here means a page never has to handle the case itself.
+ */
+type SessionListener = () => void;
+
+const sessionListeners = new Set<SessionListener>();
+
+export function onSessionExpired(listener: SessionListener): () => void {
+  sessionListeners.add(listener);
+  return () => {
+    sessionListeners.delete(listener);
+  };
+}
+
+/** Signing in with the wrong password is a 401 as well, and it is not a session ending. Bouncing
+ *  the viewer to the login page they are already looking at would lose what they typed and say
+ *  nothing about why. */
+const CREDENTIAL_CHECKS = ["/api/auth/login", "/api/auth/accept"];
+
+function announceIfSessionGone(status: number, path: string): void {
+  if (status !== 401) return;
+  if (CREDENTIAL_CHECKS.some((check) => path.startsWith(check))) return;
+  for (const listener of sessionListeners) listener();
+}
+
+async function refuse(response: Response, path: string): Promise<never> {
+  announceIfSessionGone(response.status, path);
   const payload = await response.json().catch(() => null);
   const detail = (payload as { detail?: unknown } | null)?.detail;
 
@@ -95,7 +125,7 @@ async function send<T>(method: string, path: string, body?: unknown): Promise<T>
     headers: body === undefined ? undefined : { "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  if (!response.ok) await refuse(response);
+  if (!response.ok) await refuse(response, path);
   if (response.status === 204) return undefined as T;
   return (await response.json()) as T;
 }
@@ -116,7 +146,7 @@ export const api = {
     for (const file of files) body.append("files", file);
     for (const [key, value] of Object.entries(fields)) body.append(key, value);
     const response = await fetch(path, { method: "POST", body, credentials: CREDENTIALS });
-    if (!response.ok) await refuse(response);
+    if (!response.ok) await refuse(response, path);
     return (await response.json()) as T;
   },
 
@@ -126,7 +156,7 @@ export const api = {
     body.append("file", file);
     for (const [key, value] of Object.entries(fields)) body.append(key, value);
     const response = await fetch(path, { method: "POST", body, credentials: CREDENTIALS });
-    if (!response.ok) await refuse(response);
+    if (!response.ok) await refuse(response, path);
     return (await response.json()) as T;
   },
 };
