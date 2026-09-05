@@ -19,6 +19,7 @@ from fastapi.staticfiles import StaticFiles
 from zaco.api import (
     routes_admin,
     routes_auth,
+    routes_conduct,
     routes_health,
     routes_ingest,
     routes_queue,
@@ -126,6 +127,7 @@ def create_app() -> FastAPI:
     app.include_router(routes_workbook.board)
     app.include_router(routes_settlement.router)
     app.include_router(routes_reports.router)
+    app.include_router(routes_conduct.router)
     app.include_router(routes_queue.products)
     app.include_router(web_routes.router)
 

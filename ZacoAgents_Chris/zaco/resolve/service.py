@@ -21,6 +21,8 @@ from pathlib import Path
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from zaco.conduct.conduct import Conduct
+from zaco.conduct.conduct import build as build_conduct
 from zaco.config import get_settings
 from zaco.db.models import (
     CommissionTerm,
@@ -478,6 +480,16 @@ def report(db: Session, period: Period | None = None) -> tuple[Report, str]:
     """Section 9 over the whole record, ranked on realised earnings wherever terms exist."""
     earned, coverage = earnings_by_product(db)
     return build(record_so_far(db), period or ALL_TIME, earned or None), coverage
+
+
+def conduct(db: Session) -> Conduct:
+    """Section 10 over the accumulated record, never one round at a time.
+
+    Per round it would be worse than useless: an agent's normal is exactly the thing a single
+    round is too small to establish, and a panel that reported one round's five account sales as
+    an agent's habits would manufacture a finding out of a sample size.
+    """
+    return build_conduct(record_so_far(db))
 
 
 def load(db: Session, round_: Round) -> ResolvedRound:

@@ -39,7 +39,7 @@ NAV = [
     ("/reconciliation", "Reconciliation", Permission.VIEW_REPORTS, None),
     ("/settlement", "Settlement", Permission.VIEW_REPORTS, None),
     ("/reports", "Reports", Permission.VIEW_REPORTS, None),
-    ("/conduct", "Agent conduct", Permission.VIEW_REPORTS, "Phase 7"),
+    ("/conduct", "Agent conduct", Permission.VIEW_REPORTS, None),
 ]
 
 
@@ -132,6 +132,17 @@ def reports_page(
     if not user.can(Permission.VIEW_REPORTS):
         return _page(request, "forbidden.html", user, needed=Permission.VIEW_REPORTS)
     return _page(request, "reports.html", user)
+
+
+@router.get("/conduct", response_model=None)
+def conduct_page(
+    request: Request, user: User | None = Depends(current_user_optional)
+) -> HTMLResponse | RedirectResponse:
+    if user is None:
+        return RedirectResponse("/login", status_code=303)
+    if not user.can(Permission.VIEW_REPORTS):
+        return _page(request, "forbidden.html", user, needed=Permission.VIEW_REPORTS)
+    return _page(request, "conduct.html", user)
 
 
 @router.get("/settlement", response_model=None)

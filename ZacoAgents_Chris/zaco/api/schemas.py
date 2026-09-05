@@ -762,3 +762,56 @@ class ReportOut(BaseModel):
 
     caveats: list[str] = Field(default_factory=list)
     bands: dict[str, str] = Field(default_factory=dict)
+
+
+class KeptOut(BaseModel):
+    """One account sale's deductions against the business's own normal (section 10)."""
+
+    account_sale: str
+    agent: str | None = None
+    market: str | None = None
+    gross: str
+    nett: str
+    kept: str
+    share: str
+    normal_share: str | None = None
+    normal_kept: str | None = None
+    excess: str | None = None
+    """What was kept over and above normal, in rand. The figure that says whether it matters."""
+
+    times_normal: str | None = None
+    is_flagged: bool = False
+    date_paid: date | None = None
+    has_commodity_breakdown: bool = True
+
+
+class NeverSoldOut(BaseModel):
+    """One agent's share of what was sent them that has not sold, or why it is not judged."""
+
+    agent: str | None = None
+    cartons_sent: str
+    cartons_net: str
+    cartons_unsold: str
+    share: str | None = None
+    consignments: int = 0
+    still_selling: int = 0
+    still_selling_cartons: str = "0"
+    is_judged: bool = False
+    is_flagged: bool = False
+    why_not_judged: str | None = None
+
+
+class ConductOut(BaseModel):
+    """Section 10, with what it cannot answer carried inside the panel rather than beside it."""
+
+    normal_share_kept: str | None = None
+    normal_never_sold: str | None = None
+    kept: list[KeptOut] = Field(default_factory=list)
+    never_sold: list[NeverSoldOut] = Field(default_factory=list)
+    not_answerable: str
+    """Required, and deliberately not optional: a panel reporting only what it can check reads as
+    a clean bill of health on the thing it is blind to."""
+
+    price_evidence: str
+    caveats: list[str] = Field(default_factory=list)
+    flagged_count: int = 0

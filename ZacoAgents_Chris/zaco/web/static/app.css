@@ -393,3 +393,24 @@ table.grid thead th.num { text-align: right; }
   margin-right: 0.6rem;
 }
 #picker button { margin-top: 0.75rem; }
+
+/* --- Section 10: agent conduct ---------------------------------------------------------------
+   The blind spot is a panel in its own right rather than a note under the tables, because the
+   requirement is that the conclusion travel *with* the figures. It is given the weight of a
+   finding -- a solid left edge, the same one a flagged row gets -- so a reader skimming for
+   coloured edges meets it rather than skipping it. */
+.panel.blind-spot {
+  border-left: 4px solid var(--warn-line);
+  background: var(--warn-bg);
+  color: var(--warn-ink);
+}
+
+.panel.blind-spot h2 { font-size: 1.05rem; }
+.panel.blind-spot .muted { color: #7a6a44; }
+
+/* A flagged row is marked, never coloured like an error. Section 10: none of it is an
+   accusation, and a red row is an accusation whatever the words beside it say. */
+table tbody tr.flagged > td {
+  background: var(--warn-bg);
+  box-shadow: inset 3px 0 0 var(--warn-line);
+}

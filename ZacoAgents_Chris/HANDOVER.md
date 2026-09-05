@@ -123,8 +123,8 @@ PersonalTest/ hand-made documents for trying the system by hand; see its README
 | 4 — the workbook (§5) | done; the page draws the book itself since 2026-09-04 |
 | 4.5 — promote to Render | not started; needs Chris's Render account |
 | 5 — reconciliation, Nett, settlement (§8) | done |
-| 6 — reporting (§9) | not started |
-| 7 — agent conduct (§10) | not started |
+| 6 — reporting (§9) | done |
+| 7 — agent conduct (§10) | done |
 | 8 — process both rounds, commit the book, write NOTES.md, open the PR | not started |
 
 ## Open items, most important first

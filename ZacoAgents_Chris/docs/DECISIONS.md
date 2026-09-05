@@ -227,6 +227,39 @@ decided. Every queue answer, DN approval, duplicate decision and append is stamp
 
 ---
 
+## D15 — What "normally" means when judging an agent
+
+Section 10 asks whether an agent has treated the money normally, and leaves "normally" to us.
+Three choices, all of them about not manufacturing a finding out of a sample size.
+
+**The normal is the whole business's, not each agent's own.** An agent measured against their own
+history is their own yardstick, so one who has always kept too much looks perfectly typical --
+which is the case most worth catching. The cost is that a record containing one agent lets that
+agent define the normal, and the panel says so rather than pretending otherwise.
+
+**It is a median.** On the supplied record the mean share kept is 17.4% against a median of 15.0%,
+because the 60% on AccSale `382875` is already inside the mean. A yardstick partly made of the
+outlier it is meant to expose is the wrong yardstick.
+
+**A consignment still selling has not failed to sell.** One consignment of oranges last sold on
+2026-06-05, the final day the record covers, with 120 of 200 cartons unsold -- four fifths of
+everything its agent had not shifted. Counting those as produce that failed to move would say
+something false about an agent whose fruit is simply still on the floor, so a consignment whose
+last sale falls within two days of the end of the record is set aside, counted and named. On this
+record that leaves Subtropico two finished consignments, below the threshold, so it is **not
+judged** on what did not sell -- and the panel gives that as the reason rather than staying quiet,
+because silence there reads as a pass.
+
+*Rejected:* a threshold in percentage points. A business normally paying 5% and one normally
+paying 30% cannot share a band measured in points. The threshold is relative -- half again as much
+as normal -- so it travels with whatever the normal turns out to be.
+
+*Rejected:* showing only the flagged lines. How ordinary the ordinary ones are is the entire basis
+for the comparison, and a panel showing three lines out of eighteen gives the reader no way to see
+it. The threshold governs emphasis, never visibility.
+
+---
+
 ## Not yet answered
 
 These are open. They are surfaced in the interface rather than guessed at, and this section is
