@@ -119,6 +119,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           </Link>
           <button
             type="button"
+            className="icon-button rail-toggle"
+            aria-label={collapsed ? "Expand the navigation" : "Collapse the navigation"}
+            aria-controls="sections"
+            onClick={() => setCollapsed((was) => !was)}
+          >
+            <Icon name={collapsed ? "expand" : "collapse"} />
+          </button>
+          <button
+            type="button"
             ref={closeDrawer}
             className="icon-button drawer-only"
             aria-label="Close the navigation"
@@ -147,15 +156,6 @@ export function AppShell({ children }: { children: ReactNode }) {
           >
             <Icon name="signout" />
             <span className="side-label">Sign out</span>
-          </button>
-          <button
-            type="button"
-            className="icon-button rail-toggle"
-            aria-label={collapsed ? "Expand the navigation" : "Collapse the navigation"}
-            aria-controls="sections"
-            onClick={() => setCollapsed((was) => !was)}
-          >
-            <Icon name={collapsed ? "expand" : "collapse"} />
           </button>
         </div>
       </nav>

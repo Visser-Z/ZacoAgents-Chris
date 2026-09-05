@@ -175,10 +175,6 @@
   color: var(--ink);
 }
 
-.rail-toggle {
-  align-self: flex-end;
-}
-
 /* --- collapsed to a rail ------------------------------------------------------------------- */
 
 .railed .side-label,
@@ -194,8 +190,14 @@
   padding-right: 0;
 }
 
-.railed .rail-toggle {
-  align-self: center;
+/* At 60px the mark and the toggle will not sit side by side, so the head becomes two rows
+   rather than dropping one of them: the brand is how you know which app this is, and the toggle
+   is the only way back out of the rail. */
+.railed .sidebar-head {
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 /* --- the top bar, which only exists on narrow screens --------------------------------------- */
