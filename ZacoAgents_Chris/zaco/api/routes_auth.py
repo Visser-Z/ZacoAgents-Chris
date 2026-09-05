@@ -21,23 +21,27 @@ from zaco.db.models import User
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
-def _set_session(response: Response, user: User, request: Request) -> None:
+def _is_secure(request: Request) -> bool:
+    """Whether the session cookie should carry `Secure`.
+
+    Decided by how the request actually arrived, not by a proxy for it: plain http locally, https
+    when hosted behind a TLS-terminating proxy that sets X-Forwarded-Proto (uvicorn is started
+    with --proxy-headers). COOKIE_SECURE overrides where that is wrong.
+    """
     settings = get_settings()
-    # Secure is decided by how the request actually arrived, not by a proxy for it: plain http
-    # locally, https when hosted behind a TLS-terminating proxy that sets X-Forwarded-Proto
-    # (uvicorn is started with --proxy-headers). COOKIE_SECURE overrides where that is wrong.
-    secure = (
-        settings.cookie_secure
-        if settings.cookie_secure is not None
-        else request.url.scheme == "https"
-    )
+    if settings.cookie_secure is not None:
+        return settings.cookie_secure
+    return request.url.scheme == "https"
+
+
+def _set_session(response: Response, user: User, request: Request) -> None:
     response.set_cookie(
         SESSION_COOKIE,
         issue_session(user),
-        max_age=settings.session_max_age,
+        max_age=get_settings().session_max_age,
         httponly=True,
         samesite="lax",
-        secure=secure,
+        secure=_is_secure(request),
         path="/",
     )
 
@@ -68,8 +72,21 @@ def login(
 
 
 @router.post("/logout", response_model=Message)
-def logout(response: Response) -> Message:
-    response.delete_cookie(SESSION_COOKIE, path="/")
+def logout(response: Response, request: Request) -> Message:
+    """Clear the session, with the same attributes it was set with.
+
+    A browser matches a deletion against `path`, `samesite`, `secure` and `domain`, not against
+    the name alone. Deleting on the name and path only happens to work while the cookie is
+    `SameSite=lax` over http; it would stop clearing the moment either changed, and a sign-out
+    that silently leaves the session standing is the worst way for that to be discovered.
+    """
+    response.delete_cookie(
+        SESSION_COOKIE,
+        path="/",
+        httponly=True,
+        samesite="lax",
+        secure=_is_secure(request),
+    )
     response.headers["HX-Redirect"] = "/login"
     return Message(detail="Signed out.")
 

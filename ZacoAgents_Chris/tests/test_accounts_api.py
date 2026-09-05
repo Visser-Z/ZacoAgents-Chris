@@ -97,6 +97,34 @@ def test_signing_out_clears_the_session(admin_client: TestClient) -> None:
     assert admin_client.get("/api/auth/me").status_code == 401
 
 
+def test_signing_out_deletes_the_cookie_with_the_attributes_it_was_set_with(
+    client: TestClient, db: Session
+) -> None:
+    """A browser matches a deletion on path, samesite, secure and domain -- not on the name.
+
+    The test above passes either way: `TestClient` clears on the name alone, so it cannot see the
+    difference. A real browser can, and a sign-out that quietly leaves the session standing is the
+    worst way to find that out. So this compares the two `Set-Cookie` headers directly.
+    """
+    _make_user(db, "bye@example.com", [Permission.VIEW_REPORTS])
+    signed_in = client.post(
+        "/api/auth/login", json={"email": "bye@example.com", "password": PASSWORD}
+    )
+    signed_out = client.post("/api/auth/logout")
+
+    def attributes(header: str) -> set[str]:
+        """The cookie's attributes, lowercased, minus the two that legitimately differ."""
+        parts = (p.strip().lower() for p in header.split(";")[1:])
+        return {p for p in parts if not p.startswith(("max-age", "expires"))}
+
+    setting = signed_in.headers["set-cookie"]
+    clearing = signed_out.headers["set-cookie"]
+
+    assert "path=/" in attributes(clearing)
+    assert "samesite=lax" in attributes(clearing)
+    assert attributes(setting) - {"secure"} <= attributes(clearing)
+
+
 # --- There is no self-registration -----------------------------------------------------------
 
 

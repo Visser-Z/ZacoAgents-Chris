@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Security, status
+from fastapi.security import APIKeyCookie
 from sqlalchemy.orm import Session
 
 from zaco.auth.permissions import Permission
@@ -12,9 +13,22 @@ from zaco.auth.service import SESSION_COOKIE, read_session
 from zaco.db.base import get_db
 from zaco.db.models import User
 
+#: Declared as a security scheme rather than read off the request, so the session appears in the
+#: OpenAPI document. Without it cookie auth is invisible to the schema: a generated client gets
+#: methods with no notion of authentication, and `/docs` cannot call a single protected endpoint.
+#: `auto_error=False` keeps the existing behaviour -- a missing cookie is `None` here and the
+#: refusal is raised by `current_user`, which is what lets the Jinja pages redirect instead.
+session_cookie = APIKeyCookie(
+    name=SESSION_COOKIE,
+    auto_error=False,
+    scheme_name="Session cookie",
+    description="Signed session cookie set by `POST /api/auth/login`. HttpOnly.",
+)
 
-def current_user_optional(request: Request, db: Session = Depends(get_db)) -> User | None:
-    token = request.cookies.get(SESSION_COOKIE)
+
+def current_user_optional(
+    token: str | None = Security(session_cookie), db: Session = Depends(get_db)
+) -> User | None:
     if not token:
         return None
     uid = read_session(token)

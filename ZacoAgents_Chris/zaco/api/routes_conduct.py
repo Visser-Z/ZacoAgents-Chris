@@ -7,16 +7,28 @@ fetch the reassuring half on its own, which is the failure the requirement is wr
 
 from __future__ import annotations
 
-from decimal import ROUND_HALF_UP, Decimal
-
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from zaco.api.render import money, number, optional_money
-from zaco.api.schemas import ConductOut, KeptOut, NeverSoldOut
+from zaco.api.render import money, multiple, number, optional_money, percent, plot
+from zaco.api.schemas import (
+    ConductChartOut,
+    ConductOut,
+    KeptOut,
+    KeptPointOut,
+    NeverSoldOut,
+    ThresholdsOut,
+)
 from zaco.auth.deps import requires
 from zaco.auth.permissions import Permission
-from zaco.conduct.conduct import Conduct, Kept, NeverSold
+from zaco.conduct.conduct import (
+    ENOUGH_TO_JUDGE,
+    MATERIALLY_ABOVE,
+    STILL_SELLING_DAYS,
+    Conduct,
+    Kept,
+    NeverSold,
+)
 from zaco.db.base import get_db
 from zaco.db.models import User
 from zaco.resolve import service
@@ -24,19 +36,6 @@ from zaco.resolve import service
 router = APIRouter(prefix="/api/conduct", tags=["conduct"])
 
 may_view = requires(Permission.VIEW_REPORTS)
-
-
-def _percent(value: Decimal | None) -> str | None:
-    """Display only. Never a figure anything is settled against."""
-    if value is None:
-        return None
-    return f"{(value * 100).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)}%"
-
-
-def _multiple(value: Decimal | None) -> str | None:
-    if value is None:
-        return None
-    return f"{value.quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)}x"
 
 
 def _kept(line: Kept) -> KeptOut:
@@ -47,11 +46,11 @@ def _kept(line: Kept) -> KeptOut:
         gross=money(line.gross),
         nett=money(line.nett),
         kept=money(line.kept),
-        share=_percent(line.share) or "-",
-        normal_share=_percent(line.normal_share),
+        share=percent(line.share) or "-",
+        normal_share=percent(line.normal_share),
         normal_kept=optional_money(line.normal_kept),
         excess=optional_money(line.excess),
-        times_normal=_multiple(line.times_normal),
+        times_normal=multiple(line.times_normal),
         is_flagged=line.is_flagged,
         date_paid=line.date_paid,
         has_commodity_breakdown=line.has_commodity_breakdown,
@@ -64,7 +63,7 @@ def _never_sold(line: NeverSold) -> NeverSoldOut:
         cartons_sent=number(line.cartons_sent),
         cartons_net=number(line.cartons_net),
         cartons_unsold=number(line.cartons_unsold),
-        share=_percent(line.share),
+        share=percent(line.share),
         consignments=line.consignments,
         still_selling=line.still_selling,
         still_selling_cartons=number(line.still_selling_cartons),
@@ -74,16 +73,43 @@ def _never_sold(line: NeverSold) -> NeverSoldOut:
     )
 
 
+def _chart(found: Conduct) -> ConductChartOut:
+    """Section 10's one genuinely chartable thing: every share kept against the business's normal.
+
+    The order is the one `_kept` already chose -- worst by rand first -- so the chart and the
+    table beside it cannot disagree about which line is the worst.
+    """
+    return ConductChartOut(
+        kept=[
+            KeptPointOut(
+                label=x.account_sale,
+                share=float(x.share),
+                excess=plot(x.excess),
+                gross=float(x.gross),
+                is_flagged=x.is_flagged,
+            )
+            for x in found.kept
+        ],
+        normal_share_kept=plot(found.normal_share_kept),
+    )
+
+
 def _out(found: Conduct) -> ConductOut:
     return ConductOut(
-        normal_share_kept=_percent(found.normal_share_kept),
-        normal_never_sold=_percent(found.normal_never_sold),
+        normal_share_kept=percent(found.normal_share_kept),
+        normal_never_sold=percent(found.normal_never_sold),
         kept=[_kept(x) for x in found.kept],
         never_sold=[_never_sold(x) for x in found.never_sold],
         not_answerable=found.not_answerable,
         price_evidence=found.price_evidence,
         caveats=found.caveats,
         flagged_count=len(found.flagged_kept) + len(found.flagged_never_sold),
+        thresholds=ThresholdsOut(
+            materially_above=float(MATERIALLY_ABOVE),
+            enough_to_judge=ENOUGH_TO_JUDGE,
+            still_selling_days=STILL_SELLING_DAYS,
+        ),
+        chart=_chart(found),
     )
 
 

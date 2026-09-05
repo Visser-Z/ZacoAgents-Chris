@@ -11,6 +11,7 @@ import shutil
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,6 +21,7 @@ from zaco.api import (
     routes_admin,
     routes_auth,
     routes_conduct,
+    routes_dockets,
     routes_health,
     routes_ingest,
     routes_queue,
@@ -93,6 +95,29 @@ def _seed_workbook() -> None:
         log.warning("Could not seed the workbook at %s: %s", target, exc)
 
 
+#: Refusals every protected endpoint can return, and none of them declares.
+#: FastAPI documents what a handler *returns*; these are raised, so the schema never learns about
+#: them and a generated client types every one as an unknown error. Written once here rather than
+#: on forty routes: they come from the shared dependencies, so they are a property of being
+#: protected, not of any one endpoint.
+AUTH_REFUSALS: dict[int, str] = {
+    401: "No session, or one that has expired. Sign in first.",
+    403: "Signed in, but the account does not hold the permission this endpoint needs.",
+}
+
+
+def _document_auth_refusals(schema: dict[str, Any]) -> dict[str, Any]:
+    """Add 401 and 403 to every operation that declares the session security scheme."""
+    for operations in schema.get("paths", {}).values():
+        for operation in operations.values():
+            if not isinstance(operation, dict) or not operation.get("security"):
+                continue
+            responses = operation.setdefault("responses", {})
+            for code, description in AUTH_REFUSALS.items():
+                responses.setdefault(str(code), {"description": description})
+    return schema
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title="Zaco account sales",
@@ -128,11 +153,19 @@ def create_app() -> FastAPI:
     app.include_router(routes_settlement.router)
     app.include_router(routes_reports.router)
     app.include_router(routes_conduct.router)
+    app.include_router(routes_dockets.router)
     app.include_router(routes_queue.products)
     app.include_router(web_routes.router)
 
     static_dir = Path(__file__).parent / "web" / "static"
     app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
+
+    generated = app.openapi
+
+    def openapi() -> dict[str, Any]:
+        return _document_auth_refusals(generated())
+
+    app.openapi = openapi  # type: ignore[method-assign]
     return app
 
 

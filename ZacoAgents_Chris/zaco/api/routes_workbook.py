@@ -16,7 +16,7 @@ from fastapi.responses import FileResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from zaco.api.render import money, number, optional_money
+from zaco.api.render import display_account_sale, money, number, optional_money, plot
 from zaco.api.schemas import (
     AppendedRowOut,
     AppendPreviewOut,
@@ -24,7 +24,9 @@ from zaco.api.schemas import (
     PreviewRowOut,
     ReadyRoundOut,
     ReasonIn,
+    ReconciledPointOut,
     ReconciliationBoardOut,
+    ReconciliationChartOut,
     ReconciliationOut,
     SnapshotOut,
     WorkbookStateOut,
@@ -257,9 +259,11 @@ def reconciliation(
     grouped = by_state(found)
 
     totals: dict[str, str] = {}
+    plotted: dict[str, float] = {}
     for state, items in grouped.items():
         paid = sum((r.nett for r in items if r.nett is not None), Decimal(0))
         totals[state.value] = money(paid)
+        plotted[state.value] = float(paid)
 
     return ReconciliationBoardOut(
         states=[s.value for s in State],
@@ -269,6 +273,18 @@ def reconciliation(
         },
         totals=totals,
         rounds_covered=len(service.settled_rounds(db)),
+        chart=ReconciliationChartOut(
+            lines=[
+                ReconciledPointOut(
+                    label=display_account_sale(r.account_sale),
+                    state=r.state.value,
+                    difference=plot(r.difference),
+                    nett=plot(r.nett),
+                )
+                for r in found
+            ],
+            totals=plotted,
+        ),
     )
 
 
@@ -290,7 +306,22 @@ def _reconciliation(found: Reconciliation) -> ReconciliationOut:
     )
 
 
-@router.get("/download", response_class=FileResponse)
+XLSX = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
+
+@router.get(
+    "/download",
+    response_class=FileResponse,
+    # Declared, because a `FileResponse` otherwise reaches the schema with no content type at all
+    # and a generated client hands back an untyped blob it cannot name.
+    responses={
+        200: {
+            "content": {XLSX: {"schema": {"type": "string", "format": "binary"}}},
+            "description": "The operator's workbook as it currently stands.",
+        },
+        404: {"description": "There is no workbook to download."},
+    },
+)
 def download(_: User = Depends(may_append)) -> FileResponse:
     path = service.workbook_path()
     if not path.exists():
@@ -298,7 +329,7 @@ def download(_: User = Depends(may_append)) -> FileResponse:
     return FileResponse(
         path,
         filename=path.name,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        media_type=XLSX,
     )
 
 

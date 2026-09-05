@@ -8,24 +8,35 @@ in the page, so two clients cannot disagree about what "1.64%" was a share of.
 from __future__ import annotations
 
 from datetime import date
-from decimal import ROUND_HALF_UP, Decimal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
-from zaco.api.render import money, number, optional_money
+from zaco.api.render import money, number, optional_money, percent, plot
 from zaco.api.schemas import (
     GroupTotalOut,
     HeadlineOut,
     ProductLineOut,
+    ProductPointOut,
+    ReportChartOut,
     ReportOut,
     TakeOnOut,
+    TakeOnPointOut,
 )
 from zaco.auth.deps import requires
 from zaco.auth.permissions import Permission
 from zaco.db.base import get_db
 from zaco.db.models import User
-from zaco.reporting.reports import Band, ProductLine, Report, TakeOn, Total, period_named
+from zaco.reporting.reports import (
+    BAND_A,
+    BAND_B,
+    Band,
+    ProductLine,
+    Report,
+    TakeOn,
+    Total,
+    period_named,
+)
 from zaco.resolve import service
 
 router = APIRouter(prefix="/api/reports", tags=["reports"])
@@ -42,27 +53,19 @@ BANDS: dict[str, str] = {
 }
 
 
-def _percent(value: Decimal | None) -> str | None:
-    """A ratio as a percentage to two places. Display only -- never a figure anything is settled
-    against, which is why rounding it here is safe where rounding a Nett share is not."""
-    if value is None:
-        return None
-    return f"{(value * 100).quantize(Decimal('0.01'), rounding=ROUND_HALF_UP)}%"
-
-
 def _line(line: ProductLine) -> ProductLineOut:
     return ProductLineOut(
         product=line.product,
         short_code=line.short_code,
         band=line.band.value,
-        share_of_value=_percent(line.share_of_value) or "-",
+        share_of_value=percent(line.share_of_value) or "-",
         value=money(line.value),
         cartons_sold=number(line.cartons.sold),
         cartons_returned=(None if line.cartons.returned is None else number(line.cartons.returned)),
         cartons_net=number(line.cartons.net),
         price_per_carton=optional_money(line.price_per_carton),
         cartons_sent=None if line.cartons_sent is None else number(line.cartons_sent),
-        sell_through=_percent(line.sell_through),
+        sell_through=percent(line.sell_through),
         days_on_market=line.days_on_market,
         consignments=line.consignments,
     )
@@ -82,11 +85,45 @@ def _take_on(item: TakeOn) -> TakeOnOut:
         product=item.product,
         per_carton_sent=optional_money(item.per_carton_sent),
         cartons_sent=None if item.cartons_sent is None else number(item.cartons_sent),
-        sell_through=_percent(item.sell_through),
-        return_rate=_percent(item.return_rate),
+        sell_through=percent(item.sell_through),
+        return_rate=percent(item.return_rate),
         value=money(item.value),
         earned=optional_money(item.earned),
         note=item.note,
+    )
+
+
+def _chart(built: Report) -> ReportChartOut:
+    """The same figures as numbers, for drawing only -- see `zaco.api.render.plot`.
+
+    Nulls are carried through rather than flattened: a product with no `cartons_sent` recorded is
+    absent from the sell-through chart, not sitting at nought beside the ones that did sell.
+    """
+    return ReportChartOut(
+        products=[
+            ProductPointOut(
+                label=x.product,
+                band=x.band.value,
+                value=float(x.value),
+                share_of_value=plot(x.share_of_value),
+                per_carton=plot(x.price_per_carton),
+                cartons_net=float(x.cartons.net),
+                cartons_sent=plot(x.cartons_sent),
+                sell_through=plot(x.sell_through),
+                days_on_market=x.days_on_market,
+            )
+            for x in built.products
+        ],
+        take_on=[
+            TakeOnPointOut(
+                label=x.product,
+                per_carton_sent=plot(x.per_carton_sent),
+                sell_through=plot(x.sell_through),
+                return_rate=plot(x.return_rate),
+            )
+            for x in built.take_on
+        ],
+        band_thresholds={"A": float(BAND_A), "B": float(BAND_B)},
     )
 
 
@@ -106,7 +143,7 @@ def _report(built: Report, coverage: str) -> ReportOut:
             takings=money(head.takings),
             not_yet_paid=money(head.not_yet_paid),
             price_per_carton=optional_money(head.price_per_carton),
-            return_rate=_percent(head.return_rate),
+            return_rate=percent(head.return_rate),
             return_rate_basis=head.return_rate_basis,
             consignments_that_cannot_report_returns=head.consignments_that_cannot_report_returns,
             docket_count=head.docket_count,
@@ -119,6 +156,7 @@ def _report(built: Report, coverage: str) -> ReportOut:
         commission_coverage=coverage,
         caveats=built.caveats,
         bands=BANDS,
+        chart=_chart(built),
     )
 
 

@@ -473,6 +473,24 @@ class ReconciliationOut(BaseModel):
     note: str = ""
 
 
+class ReconciledPointOut(BaseModel):
+    """One account sale's disagreement, signed. See `zaco.api.render.plot`.
+
+    `difference` is `None` where one side is simply absent -- a payment with no sales behind it
+    has no difference, it has a missing half, and drawing it at nought would say they agreed.
+    """
+
+    label: str
+    state: str
+    difference: float | None = None
+    nett: float | None = None
+
+
+class ReconciliationChartOut(BaseModel):
+    lines: list[ReconciledPointOut] = Field(default_factory=list)
+    totals: dict[str, float] = Field(default_factory=dict)
+
+
 class ReconciliationBoardOut(BaseModel):
     """The whole record's account sales, grouped by state.
 
@@ -485,6 +503,7 @@ class ReconciliationBoardOut(BaseModel):
     grouped: dict[str, list[ReconciliationOut]] = Field(default_factory=dict)
     totals: dict[str, str] = Field(default_factory=dict)
     rounds_covered: int = 0
+    chart: ReconciliationChartOut = Field(default_factory=ReconciliationChartOut)
 
 
 class WorkbookStateOut(BaseModel):
@@ -744,6 +763,86 @@ class TakeOnOut(BaseModel):
     note: str = ""
 
 
+class DocketOut(BaseModel):
+    """One sale off the floor, dated, for a client that wants to bucket it itself.
+
+    Numbers rather than strings, under the `zaco.api.render.plot` rule: this endpoint exists to be
+    drawn. The figure anybody is owed is the one on the workbook row and on the reports the record
+    produces, not this.
+
+    Deliberately not aggregated. Section 9 computes one period per request and re-derives the
+    whole record each time, so a twelve-month chart would be twelve full re-parses -- and it still
+    could not answer a daily question, because there is no day period. Sending the dockets once
+    lets the client bucket by day, week or month without any of that.
+    """
+
+    docket_number: str
+    date_sold: date | None = None
+    date_delivered: date | None = None
+    date_paid: date | None = None
+    quantity: float | None = None
+    value: float | None = None
+    price: float | None = None
+    product: str
+    short_code: str | None = None
+    consignment_id: str | None = None
+    market: str | None = None
+    agent: str | None = None
+    account_sale: str | None = None
+    is_return: bool = False
+
+
+class DocketsOut(BaseModel):
+    """Every docket the settled record holds, with what a reader needs to judge the set."""
+
+    dockets: list[DocketOut] = Field(default_factory=list)
+    rounds_covered: int = 0
+    first_sale: date | None = None
+    last_sale: date | None = None
+    undated: int = 0
+    """Dockets with no sale date. They are in the list and cannot go on a time axis."""
+
+
+class ProductPointOut(BaseModel):
+    """One product, as numbers a chart can draw. See `zaco.api.render.plot`.
+
+    Every figure here also appears as a formatted string on the matching `ProductLineOut`. That
+    one is the figure; this one is the shape.
+    """
+
+    label: str
+    band: str
+    value: float
+    share_of_value: float | None = None
+    per_carton: float | None = None
+    cartons_net: float
+    cartons_sent: float | None = None
+    sell_through: float | None = None
+    days_on_market: int | None = None
+
+
+class TakeOnPointOut(BaseModel):
+    """One line of the take-on ranking, as numbers.
+
+    `per_carton_sent` is `None` for a line that cannot be ranked -- it must be drawn as absent,
+    never as nought, because a line missing from a ranking reads as one that did badly.
+    """
+
+    label: str
+    per_carton_sent: float | None = None
+    sell_through: float | None = None
+    return_rate: float | None = None
+
+
+class ReportChartOut(BaseModel):
+    """Numbers for drawing, beside the strings for reading. Nothing is settled against these."""
+
+    products: list[ProductPointOut] = Field(default_factory=list)
+    take_on: list[TakeOnPointOut] = Field(default_factory=list)
+    band_thresholds: dict[str, float] = Field(default_factory=dict)
+    """Where the A and B bands close, as cumulative shares of value, so the chart can mark them."""
+
+
 class ReportOut(BaseModel):
     """Section 9 over one period, with what it cannot stand behind carried alongside."""
 
@@ -762,6 +861,7 @@ class ReportOut(BaseModel):
 
     caveats: list[str] = Field(default_factory=list)
     bands: dict[str, str] = Field(default_factory=dict)
+    chart: ReportChartOut = Field(default_factory=ReportChartOut)
 
 
 class KeptOut(BaseModel):
@@ -801,6 +901,42 @@ class NeverSoldOut(BaseModel):
     why_not_judged: str | None = None
 
 
+class KeptPointOut(BaseModel):
+    """One account sale's deductions, as numbers. See `zaco.api.render.plot`."""
+
+    label: str
+    share: float
+    excess: float | None = None
+    gross: float
+    is_flagged: bool = False
+
+
+class ConductChartOut(BaseModel):
+    """Numbers for drawing. The normal is here too, so the reference line is not guessed at."""
+
+    kept: list[KeptPointOut] = Field(default_factory=list)
+    normal_share_kept: float | None = None
+
+
+class ThresholdsOut(BaseModel):
+    """The constants section 10 judges by.
+
+    Sent so a client can draw the line it is judging against instead of restating the number.
+    A reference line hardcoded at 1.5 in a page is the same duplication section 10 exists to
+    avoid: the panel would keep saying "half again as much as normal" while the chart quietly
+    drew something else.
+    """
+
+    materially_above: float
+    """How many times the normal a share has to reach before it is flagged."""
+
+    enough_to_judge: int
+    """Fewer observations than this and nothing is judged at all."""
+
+    still_selling_days: int
+    """A consignment selling this recently, relative to the end of the record, is not finished."""
+
+
 class ConductOut(BaseModel):
     """Section 10, with what it cannot answer carried inside the panel rather than beside it."""
 
@@ -815,3 +951,5 @@ class ConductOut(BaseModel):
     price_evidence: str
     caveats: list[str] = Field(default_factory=list)
     flagged_count: int = 0
+    thresholds: ThresholdsOut
+    chart: ConductChartOut = Field(default_factory=ConductChartOut)
