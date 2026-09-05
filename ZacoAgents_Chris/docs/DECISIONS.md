@@ -268,7 +268,10 @@ updated as they are settled.
 1. **Are deliveries `1183200Z`, `1183201Z` and `1183202Z` one load or three?** Pears, peaches and
    strawberries, delivered the same day, sold the same day, paid under one account sale. Only the
    operator knows whether one delivery note covered them. Until answered, the queue offers the
-   multi-assign but does not presume it.
+   multi-assign but does not presume it. **Still open.** Processing both rounds took each
+   delivery's own supplier reference — `14885`, `14886`, `14887` — because each carries one, which
+   is evidence where the one-truck reading is inference. If they were one load, the three rows are
+   right and only column A is wrong, on three rows, recoverably.
 
 2. **Does Zaco issue a DN for another producer's produce?** See D11. Currently asked per
    delivery.

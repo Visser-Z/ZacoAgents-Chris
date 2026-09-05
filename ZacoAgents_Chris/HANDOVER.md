@@ -129,55 +129,59 @@ PersonalTest/ hand-made documents for trying the system by hand; see its README
 
 ## Open items, most important first
 
-### 1. The Workbook page does not show the workbook
+### 1. A row appended before its payment arrives is never revisited
 
-**This is the next session's job and Chris raised it directly.** He opened `/workbook`, saw a
-four-row summary panel and two empty sections, and said it "looks nothing like the workbook I
-gave you."
+**This is money and it is the first thing to build.** `JOH*SUB*5644210/1` sold in round 1, so
+row 11 of the committed book has a blank `Nett Total` with `no payment run` recorded as the
+reason. That was the honest answer when it was written. Its payment arrived in round 2, and the
+reconciliation board now shows it **reconciled at R1,500 with a Nett of R1,275**.
 
-He is right, and the cause is a design mistake rather than a bug. The grid exists and works, but
-it only renders **inside a preview of a round that is ready to append** — and there are no ready
-rounds, so the page shows nothing resembling a spreadsheet. The page currently answers "what is
-the state of the book" when the operator came to see the book.
+Both halves are correct on their own and nothing joins them. Not rewriting an appended row is
+deliberate and must stay that way — the book is the operator's and the whole claim of this system
+is that it does not disturb it. What is missing is a screen that says *these appended rows have a
+blank the record can now fill*, offering it as a **fresh append** rather than an edit. Without it
+the operator has to notice R1,275 by hand.
 
-What it should probably do — the next session should decide, not take this as settled:
-
-- Draw **the book's existing rows** in the same grid, always, straight from
-  `zaco/workbook/locate.py:read_rows` — that is rows 2–4 of `Sheet1` today, with their real
-  values and the operator's `NOTES` text visible.
-- Append the preview rows **beneath them**, visually separated, so the operator sees where the
-  round lands in the file they know.
-- Keep the letters-and-headers row, the sticky header and the sticky row-number column, which
-  already work.
-- `read_rows` currently returns only `dn / stm_no / description / date` — it will need to return
-  every column to draw the book. That is a small change to `BookRow` and one to `read_rows`.
-
-Everything needed is already in place: `SheetLayout.headers` carries the book's own header text,
-`SheetLayout.columns` the order, and `app.css` has the `.grid`, `.chip` and `.legend` styles.
+Everything needed exists: `zaco/resolve/reconcile.py` knows the account sale is settled,
+`zaco/workbook/locate.py:read_rows` can already read every column of every row, and
+`zaco/workbook/agreement.py` already holds each appended round's claim against the file.
 
 ### 2. Chris's demo data is split across three rounds
 
-Rounds 1, 2 and 3 in the live database each hold part of one round: the sales file alone, the
+Rounds 1, 2 and 3 in his live database each hold part of one round: the sales file alone, the
 consignment report alone, then the three payment and statement files. The five `PersonalTest/
 round-a` files are meant to go up **together**. Split like that, the consignment report has no
 sales to agree with and the statements have no rows to attach to.
 
 Tell him to put rounds 1 and 2 aside (Resolution queue → *Put the round aside*, with a reason)
 and upload all five at once. Expected then: 5 deliveries, 5 rows, R8,025.00, 12 open questions.
-Do not do it for him without asking — they are his rounds.
+**Do not do it for him without asking — they are his rounds.**
 
-### 3. Phase 5 fills the column Phase 4 deliberately left blank
+### 3. Hosting is written and unexercised
 
-`Nett Total` is written only when exactly one row sits under an account sale. Where a payment run
-covers several rows the cell is blank and the grid says `SPLIT ACROSS N ROWS`, because
-apportioning it has to sum to the payment exactly and that is §8's job. The largest-remainder
-allocator, the fruit-named-deduction rule (finding 8: plums `3000 − 172.50 − 46 = 2781.50`,
-nectarines `1000 − 57.50 = 942.50`, summing to exactly `3724.00`) and the five reconciliation
-states all belong there.
+`render.yaml` exists; Phase 4.5 has never run. It needs Chris's own Render account, so it cannot
+be done for him. The one thing that will not be free when a separate-origin frontend arrives: auth
+is a session cookie and the pages use `credentials: "same-origin"`. A separate origin needs
+`credentials: "include"`, `allow_credentials` on the CORS config and `SameSite=None; Secure`, or a
+token flow instead.
 
-### 4. Smaller things noted and not done
+### 4. The pull request is deliberately not open
 
-- `read_rows` reads four columns; the grid will want all of them (see item 1).
+Everything Phase 8 asks for is committed and pushed. Chris was offered the PR — draft, ready, or
+body-only — and chose **not yet**. Do not open it without him saying so.
+
+### 5. Nine product short codes in column G are not the operator's
+
+`lookup/product-codes.json` carries two. The rest were supplied while processing both rounds,
+because the queue rightly blocks until somebody gives them. They follow the shape of the
+operator's existing rows but drop the `Imp` prefix, which reads as *imported* and is a claim
+nothing in the data supports. They are labels, not figures — no money depends on them — but they
+should be replaced with the real ones when Chris has them. Listed in `NOTES.md`.
+
+### 6. Smaller things noted and not done
+
+- `PersonalTest/README.md` was three phases out of date and was refreshed on 2026-09-05; check it
+  again if the queue's behaviour changes.
 - The compose backup sidecar's copies are named `sidecar-*` and are deliberately **not** offered
   as rollback targets — a timer-driven copy can catch the file mid-write, which is the whole
   reason D4 puts the snapshot inside the append. If that ever changes, say why in the UI.
@@ -186,6 +190,9 @@ states all belong there.
   the append-once check and visible in the version list; not otherwise handled.
 - `render.py` and `domain/model.py` both expose `display_account_sale`; the second is canonical
   and the first delegates. Leave it that way or remove the shim, but not both.
+- `_open_questions` re-derives a whole round per unsettled round in the rounds list. Correct, and
+  the only way the figure is true, but it is the obvious thing to cache if that list ever gets
+  long.
 
 ---
 
@@ -388,3 +395,68 @@ on as before** — do not offer to trim or delete the suite again.
    "what this set does not cover" list is now out of date twice over.
 3. **Chris's split rounds.** Rounds 1 and 2 aside, five files up together — his to do.
 4. `render.py` and `domain/model.py` both expose `display_account_sale`; one delegates.
+
+---
+
+## 2026-09-05 — Phases 6, 7 and 8, and two defects found by using the thing
+
+Branch `feature/zaco-agents-system`, 37 commits ahead of `main`, `main` untouched.
+**549 tests pass, nothing skipped**, `ruff check`, `ruff format --check` and `mypy zaco`
+(strict, 60 files) clean. The pull request is **not** open, at Chris's instruction.
+
+### What was built
+
+**Phase 6 — reporting (§9).** `zaco/reporting/reports.py`, `GET /api/reports?period=all|month|week`,
+`/reports`. Sourced from **dockets, not workbook rows**: a docket no payment run has named yet
+forms no row, and the record has one — R800 of grapes on 2026-06-02 — so counting rows would have
+left the takings R800 short while looking complete. An unknown period is refused with 422 rather
+than quietly treated as all time.
+
+**Phase 7 — agent conduct (§10).** `zaco/conduct/conduct.py`, `GET /api/conduct`, `/conduct`.
+Recorded as **D15**. The not-answerable conclusion is a **field on the result**, not a paragraph
+in the template — a page can be redesigned and lose a paragraph, and what is left reads as a clean
+bill of health on the thing it cannot see.
+
+**Phase 8 — both rounds through the system.** Fourteen rows appended beneath the operator's three,
+round 1 at rows 5–11 and round 2 at 12–18, driven through the running stack over the real HTTP API
+on an **isolated compose project** (`-p zaco_phase8`, own DB and volumes, port 8100) so nothing
+touched Chris's live stack or the rounds already in it. `NOTES.md` now states every threshold with
+its argument and no longer claims §§8–10 are unbuilt.
+
+### The two defects, both found by using the system rather than by testing it
+
+**`RoundSummaryOut.open_questions` was never assigned**, so it took the schema default of nought
+on every round in the list — including one whose fourteen open questions were blocking its append.
+The detail view had computed it correctly all along, so the two disagreed and the list was the one
+an operator reads to decide what needs attention. Proved live: the same round went from `OPEN=0`
+to `OPEN=10` once the fix was running.
+
+**The suite used the deliverable as its fixture.** `tests/conftest.py` and two test modules copied
+`workbook/account-sales-book.xlsx` and asserted against what was in it — that rows go beneath what
+is already there, that the `14xxx` series ends where it ends. That file is also what the brief
+asks to be committed *with both rounds processed into it*, so it grows, and seventeen tests were
+really asserting against whatever had been appended last. The pristine three-row book now lives at
+`tests/fixtures/account-sales-book.pristine.xlsx`.
+
+### Three things a later session should not have to rediscover
+
+1. **`docker compose restart app` serves stale code.** The Dockerfile `COPY`s the source in rather
+   than mounting it, so a restart comes back running whatever was baked into the existing image.
+   Nothing errors; a newly registered route simply 404s as though it were a mistake in the code
+   just written. Use `docker compose up -d --build app`. Now written up in `docs/RUNNING.md`.
+2. **The admin password is `change-me-please`, not `change-me`.** `docker-compose.yml` sets
+   `ADMIN_PASSWORD`, which overrides the default in `zaco/config.py`. `docs/RUNNING.md` has said so
+   all along. A 401 here is not evidence that anybody changed anything.
+3. **A green run with everything skipped is not green.** The `db` marker skips when Postgres is
+   unreachable. Check the summary line says `549 passed` with no `skipped`.
+
+### What the processed book proves
+
+- rows 1–4 **byte-for-byte unchanged**; column V, which no report fills, still empty on all 14 rows
+- all **eight formula columns are formulas**, each built from the letters resolved in that file and
+  referencing its own row
+- **DN 14721 on rows 5 and 6**, 14880 on 11 and 13 — one delivery across two account sales is two
+  rows, and `Qty Received` is written once
+- opening stock carries **across the round boundary**: cherries 14 → 12, oranges 200 → 150
+- AccSale 382880's R250 splits **83.34 / 83.33 / 83.33**, summing to the payment exactly
+- row 11's Nett is blank with its reason recorded — see open item 1, which is where that leads

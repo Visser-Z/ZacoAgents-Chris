@@ -66,8 +66,10 @@ a **question** with its reasoning. Answer it either way and watch the product co
 | `2200400Z` | `20026*30055` | **14933** | minted — **flagged**: `30055` is a producer code elsewhere in this round |
 | `2200500Z` | `30055*14940` | **14940** | reference half passed; the produce belongs to **producer 30055**, not Zaco |
 
-The numbers depend on where your `14xxx` series has got to — with the shipped book at
-`14690`–`14692`, minting starts at `14931` because `14930` has already been proposed.
+The numbers depend on where your `14xxx` series has got to. The shipped book now runs to
+`14892`, because both supplied rounds have been processed into it — and the proposals above are
+**unchanged**, because minting goes above everything known and `14930`, taken from a supplier
+reference, still tops the series on its own. Re-observed on 2026-09-05 against the committed book.
 
 Two of five carry a flag and three do not. That is the point: a warning on every row is a
 warning nobody reads by the second week.
@@ -165,13 +167,57 @@ the end, and the bare `14902` inherits the producer code rather than being left 
 
 ---
 
+---
+
+## 5. After the queue — the screens that read the record
+
+These files were built to exercise the queue, and they still do. Everything downstream of it now
+exists too, and round A alone is enough to see it working. Answer the questions, **Close the
+queue**, press **Append**, then look at these. Every figure below was observed on 2026-09-05.
+
+| Screen | What round A actually shows |
+|---|---|
+| `/workbook` | the five rows landing beneath what is already in the book, the eight formula columns still formulas |
+| `/reconciliation` | **all three** account sales reconciled, R6,821.25. Nothing is outstanding |
+| `/settlement` | **0 of 5 consignments can be settled**; all five under *awaiting terms*, total owed R0.00 |
+| `/reports` | takings **R8,275.00** over 7 sales, 160 sold, 5 back, 155 net |
+| `/conduct` | a normal of 15.00%, nothing flagged, and neither agent judged on what did not sell |
+
+Four of those repay a closer look.
+
+**The takings are R250 more than the round is worth, and that is correct.** The round totals
+R8,025.00; `/reports` says R8,275.00. The difference is the watermelon, which carries payment
+reference `PRE*BT*0` and so forms no workbook row. Section 9 asks what *sold*, and it sold — so
+reporting counts it from the docket and states the gap: *"R250.00 of what sold is not yet in any
+payment run."* Counting rows instead would have been R250 short while looking complete.
+
+**Reconciliation does not show the watermelon at all**, and that is also correct. It reconciles
+account sales against each other, and there is no account sale to put it under. The place it does
+appear is the round's own screen, under *sold, not yet in any payment run*. Two screens, two
+questions, and the difference between them is worth understanding before trusting either.
+
+**Settlement refuses rather than guesses.** Record a supplier and a commission percentage on
+`/settlement` for one consignment only. That one gains a figure; the other four stay in *awaiting
+terms* as their own section rather than being folded into a total at some assumed rate. The
+coverage line says *0 of 5* before you start, and it never lets a total quietly speak for less of
+the business than it appears to.
+
+**Conduct declines to judge this sample.** It shows a normal of 15.00% and then says the normal
+comes from three account sales, *"which is too few to be a normal. It is shown so the figures can
+be read, not so they can be judged."* Both agents come back unjudged on what did not sell — four
+of five consignments last sold at the very end of the record and are treated as still selling.
+That is the rule working, not a gap: an agent's normal is exactly what a handful of statements
+cannot establish.
+
+---
+
 ## What this set does not cover
 
-- **Appending to the workbook.** That is Phase 4; the queue stops at *resolved*.
-- **Reconciliation, settlement, reports and the agent conduct panel.** Phases 5 to 7.
 - A **workbook** whose `STM No` matches one of these account sales, so the delivery-note reuse
   path has nothing to reuse. It is exercised by the test suite instead
   (`tests/test_dn.py::test_the_workbook_wins_over_the_reference`).
+- **A record big enough to judge an agent on.** Deliberate — see above.
+- **Hosting.** Everything here is local.
 
 ## Three defects these files found
 
