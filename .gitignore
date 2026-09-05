@@ -25,3 +25,12 @@ htmlcov/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Frontend
+node_modules/
+# The SPA is a build artefact, produced by `npm run build` and by the Docker image. It is not
+# committed: the sources under ZacoAgents_Chris/frontend/src are the record of it, and a stale
+# committed bundle is worse than none -- it serves silently.
+ZacoAgents_Chris/zaco/web/spa/
+frontend/dist/
+*.tsbuildinfo

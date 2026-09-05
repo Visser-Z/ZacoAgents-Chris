@@ -13,3 +13,10 @@ __pycache__
 .vscode
 htmlcov
 .coverage
+node_modules
+frontend/node_modules
+frontend/dist
+# Built inside the image by the frontend stage, never copied from the host: a developer's local
+# build would otherwise ship instead of the one this Dockerfile made.
+zaco/web/spa
+*.tsbuildinfo

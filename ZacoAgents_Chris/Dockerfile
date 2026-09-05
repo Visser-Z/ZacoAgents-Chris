@@ -1,6 +1,28 @@
 # One image, two targets. Nothing here knows whether it is running under docker compose on a
 # laptop or on a hosting provider -- only the environment differs (D3).
 
+# --- the frontend, built here and not on anybody's machine ---------------------------------------
+# The bundle is a build artefact: it is gitignored, and .dockerignore keeps a local `npm run build`
+# from being copied in. Building it in the image is what makes the two agree.
+#
+# Bundled, never fetched: D3 says the system has to run from `docker compose up` with no CDN, and
+# a React app loaded from unpkg would break that promise while appearing to work on a connected
+# laptop.
+FROM node:22-alpine AS frontend
+
+WORKDIR /build
+
+# Manifests first, so editing a component does not reinstall the world.
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
+COPY frontend/ ./
+# Typecheck first, so a type error fails the image rather than shipping inside it -- `vite build`
+# alone strips types without checking them. The output is redirected because vite.config.ts writes
+# to ../zaco/web/spa, which is outside the directory this stage owns.
+RUN npm run typecheck && npx vite build --outDir /build/dist --emptyOutDir
+
+# --- the application -----------------------------------------------------------------------------
 FROM python:3.12-slim AS base
 
 ENV PYTHONUNBUFFERED=1 \
@@ -28,6 +50,9 @@ COPY lookup ./lookup
 # the first time the stack comes up; this seeds it once, so a fresh clone has something to read
 # the delivery note series from instead of refusing to propose a number.
 COPY workbook/account-sales-book.xlsx ./seed/account-sales-book.xlsx
+# The built frontend, from the stage above. Served at /app beside the API, same origin, so the
+# session cookie needs no relaxing and there is no CORS or CSRF surface to add.
+COPY --from=frontend /build/dist ./zaco/web/spa
 COPY entrypoint.sh ./
 RUN chmod +x entrypoint.sh
 
