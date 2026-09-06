@@ -1,7 +1,7 @@
 /**
  * One open question, and the three shapes an answer takes.
  *
- * The Jinja page stacks all fourteen cards down the page. That is honest and it is a bad way to
+ * The page this replaced stacked all fourteen cards down the page. Honest, and a bad way to
  * spend a Monday: the operator scrolls to find the one they are on, every card's inputs are live
  * at once, and the evidence for the question being answered is competing with thirteen others.
  * Here it is one at a time, with what the question was raised on beside the answer rather than

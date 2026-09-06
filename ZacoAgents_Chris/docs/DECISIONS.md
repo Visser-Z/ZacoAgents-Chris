@@ -12,13 +12,17 @@ Open questions are at the bottom — they are surfaced in the UI rather than gue
 ## D1 — Stack
 
 **Python 3.12 + FastAPI, API-first.** Everything is exposed under `/api/*` as JSON with a
-generated OpenAPI schema. The built-in interface is a thin Jinja + HTMX client that calls only
-those endpoints.
+generated OpenAPI schema. The interface is a React app that calls only those endpoints, built
+into the image and served by FastAPI at `/` from the same origin.
+
+*The claim was tested.* The first interface was server-rendered pages; replacing them wholesale
+with React needed no change to a single endpoint. That is the argument for API-first, made good
+rather than asserted.
 
 *Why:* `openpyxl` is the only mature library that can append to an existing `.xlsx` while
 preserving the operator's formulas, styles and untouched columns — which is assessed item 5 in
-§13. Building API-first means a React or Flutter frontend can be added later with nothing but
-CORS and the schema; no server rewrite.
+§13. Building API-first meant the frontend could be replaced with nothing but the schema and no
+server rewrite — and because it is served from the same origin, not even CORS.
 
 *Rejected:* TypeScript/Next.js — the JavaScript xlsx libraries are noticeably worse at
 preserving an existing workbook. Streamlit — too weak for a blocking resolution queue and hard

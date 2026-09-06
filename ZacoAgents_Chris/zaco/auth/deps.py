@@ -17,7 +17,7 @@ from zaco.db.models import User
 #: OpenAPI document. Without it cookie auth is invisible to the schema: a generated client gets
 #: methods with no notion of authentication, and `/docs` cannot call a single protected endpoint.
 #: `auto_error=False` keeps the existing behaviour -- a missing cookie is `None` here and the
-#: refusal is raised by `current_user`, which is what lets the Jinja pages redirect instead.
+#: refusal is raised by `current_user`, which is what lets a page redirect to sign-in instead.
 session_cookie = APIKeyCookie(
     name=SESSION_COOKIE,
     auto_error=False,

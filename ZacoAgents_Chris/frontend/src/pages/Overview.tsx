@@ -1,10 +1,10 @@
 /**
  * The first page after signing in.
  *
- * `home.html` still opens with "Phase 0 is in place ... nothing reports a figure yet", which
- * stopped being true several phases ago -- the record is read, resolved, appended, reconciled,
- * settled and reported on. That notice is not carried over; the Jinja copy of it goes when the
- * Jinja pages do.
+ * `home.html` opened with "Phase 0 is in place ... nothing reports a figure yet", which had
+ * stopped being true several phases before anybody noticed -- the record is read, resolved,
+ * appended, reconciled, settled and reported on. That notice was not carried over, and the page
+ * that carried it is gone.
  */
 
 import { Page } from "../components/Page";

@@ -77,8 +77,6 @@ def login(
     except AuthError as exc:
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, str(exc)) from exc
     _set_session(response, user, request)
-    if request.headers.get("HX-Request"):
-        response.headers["HX-Redirect"] = "/"
     return _to_out(user)
 
 
@@ -98,7 +96,6 @@ def logout(response: Response, request: Request) -> Message:
         samesite="lax",
         secure=_is_secure(request),
     )
-    response.headers["HX-Redirect"] = "/login"
     return Message(detail="Signed out.")
 
 
@@ -111,8 +108,6 @@ def accept(
     except AuthError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     _set_session(response, user, request)
-    if request.headers.get("HX-Request"):
-        response.headers["HX-Redirect"] = "/"
     return _to_out(user)
 
 

@@ -460,3 +460,123 @@ really asserting against whatever had been appended last. The pristine three-row
 - opening stock carries **across the round boundary**: cherries 14 → 12, oranges 200 → 150
 - AccSale 382880's R250 splits **83.34 / 83.33 / 83.33**, summing to the payment exactly
 - row 11's Nett is blank with its reason recorded — see open item 1, which is where that leads
+
+
+## 2026-09-06 — A React frontend, a way back into an account, and the Jinja pages removed
+
+Branch `feature/zaco-agents-system`, `main` untouched. **561 tests pass**, `ruff check`,
+`ruff format --check` (111 files) and `mypy zaco` (61 files, strict) clean. The image builds and
+runs; the app is served at `/`.
+
+### What changed
+
+The eight-step frontend plan in
+`C:\Users\Chris\.claude\plans\first-read-through-the-sparkling-meadow.md` is complete. The
+interface is now React + TypeScript, built by a `node:22-alpine` stage inside the same image and
+served by FastAPI from its own origin. **Fourteen Jinja templates, `app.js` and `zaco/web/routes.py`
+are gone** — about 2,600 lines removed against 180 added in the final step.
+
+Between the plan's step 7 and step 8, accounts got the thing they had never had: a way back in.
+
+### The three layers of getting back into an account
+
+Each exists because the one above it runs out.
+
+1. **You know your password** — change it on your own account page.
+2. **You do not** — say so from the sign-in page, which puts you on a list at the top of Accounts.
+   An administrator issues a one-time link, valid four hours, and hands it over. Nothing is
+   emailed; there is no mail in this system by design (D3).
+3. **No administrator can sign in either** — `python -m zaco.recover you@example.com`, run on the
+   server. **There is no endpoint for this and nothing imports the module.** It asks for possession
+   of the server rather than of an account, and whoever has that already holds the database it
+   reads and the workbook the system exists to write. It prints a link rather than setting a
+   password, so the new password is typed by the person who will use it.
+
+Layer 3 exists because Chris pointed out that layers 1 and 2 dead-end together: the first account
+is seeded only on an empty database and an existing password is never reset, so with both
+administrators locked out the system was unopenable with the operator's live workbook inside it.
+
+Accounts also gained a **trail** (`account_events`). Changing the address an account signs in with
+demands a typed reason, because it rewrites who every past decision appears to have come from.
+
+### Three protections, each verified by breaking it
+
+Removing each guard in turn failed exactly one test and nothing else:
+
+- **single-use** — a spent link works twice
+- **deactivated accounts** — somebody turned off walks back in on a link issued beforehand
+- **enumeration** — `/api/auth/forgot` saying "no such account" turns the sign-in page into a way
+  to find out who works here, one address at a time
+
+### Two defects found by using it rather than by testing it
+
+**The reset page read the server's sentence to decide whether the link was dead.** It isn't:
+`use_reset` checks the link first and spends it *last*, so a password under twelve characters comes
+back as a refusal with the link still perfectly good — and the page would have told the person to
+go and get another one. The length is now checked client-side against the same constant, which
+leaves only refusals nobody can fix by retyping.
+
+**Moving the app to `/` would have answered mistyped API paths with a page.** While it sat under
+`/app`, nothing outside that prefix reached the mount. At `/` the mount catches everything
+unmatched, so `GET /api/nonsense` would have returned HTTP 200 and HTML — reported by a client as a
+JSON parse error, which points at the response body rather than at the URL that was wrong.
+`_is_client_route` keeps `api` and `assets` out; `test_the_api_is_not_shadowed_by_the_app` pins it.
+
+### The development database was destroyed by the test suite
+
+**Read this before running any subset of the suite.** The `zaco` database was truncated and
+re-seeded with fixture data during this session. Chris's account and the rounds behind the rows
+already in the workbook are gone and are not recoverable — there is no database dump, and the
+sidecar backs up the workbook only.
+
+**The workbook itself was never touched.** `account-sales-book.xlsx` is intact, 7,273 bytes,
+unchanged since 3 September, with its three saved versions and the sidecar snapshots present.
+
+The cause was latent from the moment `tests/test_spa_mount.py` was written, and had nothing to do
+with the flip:
+
+- `zaco/config.py`'s default `database_url` is the **development** database, `.../zaco`.
+- `conftest._configure_environment` redirects that to `zaco_test`, but ran only when a test asked
+  for a database fixture, and cleared `get_settings`'s cache without clearing the SQLAlchemy
+  engine built from it — a module-level global in `zaco/db/base.py`, created on first use.
+- The three `@needs_build` cases in `test_spa_mount.py` need no database fixture, but each builds
+  a `TestClient`, which runs the app's lifespan, which opens a session.
+
+So any run whose first file was that one bound the engine to the development database, and every
+`clean_db` afterwards truncated it — reporting a row of green dots while it did. Running the whole
+suite alphabetically was safe only by accident, because `test_accounts_api` happens to come first
+and happens to use a database fixture. It was triggered by
+`pytest tests/test_spa_mount.py tests/test_password_recovery.py tests/test_workbook_api.py`.
+
+Three things now stop it, and the last one is the one that matters:
+
+1. `_configure_environment` resets `base._engine` and `base._SessionLocal`, not just the settings.
+2. `settings_env` is `autouse`, so it runs before every test and ordering cannot decide anything.
+3. `clean_db` calls `_must_be_a_test_database`, which refuses to truncate any database not named
+   `*_test` and says which one it saw. `tests/test_suite_safety.py` pins it.
+
+Verified by putting a marker row in the live database and running the exact command that had
+destroyed it: the row survived, and survived a full suite run afterwards.
+
+### Things a later session should not have to rediscover
+
+1. **`npm run build` is not optional outside Docker.** There is no server-rendered fallback any
+   more. Without it, uvicorn serves a working API and a 404 at the root — it says so in the log.
+   Documented in `docs/RUNNING.md`.
+2. **`frontend/src/api/schema.d.ts` is generated and committed, and nothing regenerates it.**
+   Run `npm --prefix frontend run types` with the API up after changing an endpoint's shape. It is
+   deliberately not automatic: a silent regeneration turns a breaking API change into a frontend
+   that compiles against the break.
+3. **Never run two `pytest` invocations at once.** They share `zaco_test` and truncate between
+   cases, so the second one wipes the first one's seeded admin mid-test. It presents as a dozen
+   unrelated failures with a unique-constraint violation buried in the log.
+4. **`jinja2` is no longer a dependency.** Removed from `pyproject.toml` and the Dockerfile with
+   the templates.
+
+### What is left
+
+- **Hosting (Phase 4.5).** `render.yaml` is written and unexercised; it needs Chris's Render
+  account. Nothing in the application changes between the two targets — only the environment.
+- **The pull request.** Not opened; Chris has not asked for it.
+- **The blank-Nett follow-up** from the Phase 8 entry above is still open, and is still the first
+  thing worth building next.

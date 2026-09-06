@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from tests.test_accounts_api import PASSWORD, _make_user
 from zaco.auth.permissions import Permission
 from zaco.auth.service import RESET_PATH, get_user_by_email
+from zaco.main import spa_dir
 
 pytestmark = pytest.mark.db
 
@@ -270,16 +271,24 @@ def test_the_recovery_command_is_not_reachable_over_http(client: TestClient, db:
 
 
 def test_a_recovery_link_points_at_a_page_that_exists(client: TestClient, db: Session) -> None:
-    """A printed link that 404s is a recovery path that does not recover anything."""
+    """A printed link that 404s is a recovery path that does not recover anything.
+
+    Pinned by fetching it, not by comparing it to `RESET_PATH` -- that would pass just as happily
+    if the app stopped serving the page, which is the failure this is here to catch. Skipped
+    rather than passed where the frontend has not been built, because a check that reads as a
+    pass without having run is the same failure somewhere else.
+    """
+    if not (spa_dir() / "index.html").exists():
+        pytest.skip("No built frontend; run `npm run build` in frontend/.")
+
     user = _make_user(db, "lost@example.com", [Permission.INGEST])
     admin = _admin(client, db)
     url = _issue_for(admin, user.id)
 
     assert RESET_PATH in url
-    # Reached against the interface that still owns `/`, it redirects rather than dead-ending.
-    hop = client.get(f"/reset/{_token_of(url)}", follow_redirects=False)
-    assert hop.status_code == 303
-    assert hop.headers["location"] == f"{RESET_PATH}/{_token_of(url)}"
+    page = client.get(f"{RESET_PATH}/{_token_of(url)}")
+    assert page.status_code == 200
+    assert page.headers["content-type"].startswith("text/html")
 
 
 # --- the rest of an account --------------------------------------------------------------------

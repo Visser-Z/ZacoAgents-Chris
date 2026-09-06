@@ -36,7 +36,6 @@ from zaco.auth.service import seed_admin
 from zaco.config import get_settings
 from zaco.db.base import get_session_factory
 from zaco.resolve.service import WORKBOOK_NAME, workbook_path
-from zaco.web import routes as web_routes
 
 #: A copy of the starting workbook, shipped in the image. The live book lives on a persistent
 #: volume that is empty on a fresh stack, and without a book there is no delivery note series
@@ -120,12 +119,22 @@ def _document_auth_refusals(schema: dict[str, Any]) -> dict[str, Any]:
     return schema
 
 
-#: The build puts hashed bundles under this directory, and nothing else lives there.
-ASSETS = "assets"
+#: The two first segments that are never a page. `assets` is where the build puts hashed bundles
+#: and nothing else; `api` is the JSON API, which shares the root with the app now that the app is
+#: mounted there.
+NOT_PAGES = ("assets", "api")
 
 
-def _is_asset(path: str) -> bool:
-    r"""Whether a missing path was a bundle rather than a client route.
+def _is_client_route(path: str) -> bool:
+    r"""Whether a missing path should be answered with the page rather than a 404.
+
+    A single-page app owns its own routes, so almost everything unknown *is* a page. The two
+    exceptions have the same failure in common: answered with HTML, a missing bundle reaches the
+    browser as `Unexpected token '<'` and a mistyped API path reaches a client as a parse error,
+    and neither message says anything about the real fault.
+
+    `api` matters only since the app moved to `/`. While it was under `/app` nothing outside that
+    prefix reached here at all.
 
     Compared through `PurePath` rather than by string prefix: Starlette hands this a path built
     with the host's separator, so on Windows it is `assets\index.js` and a `startswith("assets/")`
@@ -133,25 +142,31 @@ def _is_asset(path: str) -> bool:
     machine, which is the harder way round to notice.
     """
     parts = PurePath(path).parts
-    return bool(parts) and parts[0] == ASSETS
+    return not parts or parts[0] not in NOT_PAGES
 
 
 class _SpaFiles(StaticFiles):
     """Static files that fall back to `index.html` instead of 404ing.
 
-    A single-page app owns its own routes: the browser asks the server for `/app/reports`, and
-    there is no such file. Without this, a reload anywhere but the root returns a 404 -- the
-    classic way a SPA works perfectly until somebody refreshes.
+    A single-page app owns its own routes: the browser asks the server for `/reports`, and there
+    is no such file. Without this, a reload anywhere but the root returns a 404 -- the classic way
+    a SPA works perfectly until somebody refreshes.
 
-    Only paths under the mount reach here, so `/api` is untouched and a missing *asset* still
-    fails as an asset rather than being answered with a page.
+    The mount is at `/` and is registered last, so everything unmatched arrives here. What must
+    *not* be answered with a page is decided by `_is_client_route`.
     """
 
     async def get_response(self, path: str, scope: Scope) -> Response:
         try:
             return await super().get_response(path, scope)
-        except StarletteHTTPException as missing:
-            if missing.status_code != 404 or _is_asset(path):
+        except StarletteHTTPException as refusal:
+            if refusal.status_code == 405:
+                # StaticFiles serves GET and HEAD and refuses everything else with 405. Anything
+                # that reached here matched no API route, so 405 would say the address exists and
+                # only dislikes the verb -- which is both wrong and a hint that it exists. The
+                # answer before the app moved to `/` was 404, and 404 is what it still is.
+                raise StarletteHTTPException(404) from refusal
+            if refusal.status_code != 404 or not _is_client_route(path):
                 raise
             return await super().get_response("index.html", scope)
 
@@ -167,7 +182,7 @@ def spa_dir() -> Path:
 
 
 def _mount_spa(app: FastAPI, directory: Path | None = None) -> None:
-    """Serve the built React app at `/app`, if it has been built.
+    """Serve the built React app at `/`, if it has been built.
 
     Same origin as the API by design: the session is an HttpOnly cookie with SameSite=lax and
     there is no CSRF token in this system, so a separate frontend origin would need
@@ -175,16 +190,17 @@ def _mount_spa(app: FastAPI, directory: Path | None = None) -> None:
     and keeps the promise that the whole thing runs from `docker compose up` with nothing fetched
     from a CDN (D3).
 
-    Mounted at `/app` rather than `/` while the Jinja interface still exists -- both want `/`,
-    `/login` and `/queue`. The move to `/` is a one-line change once every page has a twin.
+    Mounted last, so every route registered above it wins: the API, `/docs`, `/openapi.json`.
+    A mount at `/` matches everything left over, which is what a single-page app needs and why
+    `_is_client_route` has to keep `/api` out of it.
     """
     built = directory if directory is not None else spa_dir()
     if not (built / "index.html").exists():
-        # Not an error: a checkout that has never run `npm run build` simply has no SPA yet, and
-        # the Jinja interface is still the one being served.
-        log.info("No built frontend at %s; serving the Jinja interface only.", built)
+        # Not an error, but there is no interface at all now, so it is worth saying out loud
+        # rather than leaving somebody to discover a bare API by getting a 404 at the root.
+        log.warning("No built frontend at %s; the API is up but nothing serves a page.", built)
         return
-    app.mount("/app", _SpaFiles(directory=str(built)), name="spa")
+    app.mount("/", _SpaFiles(directory=str(built)), name="spa")
 
 
 def create_app() -> FastAPI:
@@ -224,10 +240,7 @@ def create_app() -> FastAPI:
     app.include_router(routes_conduct.router)
     app.include_router(routes_dockets.router)
     app.include_router(routes_queue.products)
-    app.include_router(web_routes.router)
 
-    static_dir = Path(__file__).parent / "web" / "static"
-    app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
     _mount_spa(app)
 
     generated = app.openapi

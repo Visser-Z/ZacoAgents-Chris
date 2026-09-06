@@ -1,15 +1,15 @@
 /**
  * The routes.
  *
- * Mounted under `/app` while the Jinja interface still owns `/`, `/login`, `/queue` and the rest;
- * the two would collide otherwise. The prefix comes from Vite's `base` rather than being written
- * out, so the last step of the port -- moving this app to `/` -- is a change to one build setting
- * and not a search through the source for a string.
+ * Mounted at `/`. The prefix still comes from Vite's `base` rather than being written out, which
+ * is what made moving the app off `/app` a change to one build setting instead of a search
+ * through the source for a string.
  *
  * The eight sections are generated from the same `NAV` the sidebar is drawn from. That is on
  * purpose: a route the navigation does not offer, or an item that leads nowhere, is exactly the
- * kind of drift that appears when the two lists are maintained separately. A path with no entry
- * in `BUILT` gets the placeholder, so adding a page is one line here and nothing anywhere else.
+ * kind of drift that appears when the two lists are maintained separately. Adding a page is one
+ * line in `BUILT` and nothing anywhere else -- and a nav item without one is refused at load
+ * rather than rendering as a blank page nobody thinks to report.
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -26,7 +26,6 @@ import { Accounts } from "./pages/Accounts";
 import { Forgot } from "./pages/Forgot";
 import { Login } from "./pages/Login";
 import { NotFound } from "./pages/NotFound";
-import { NotYetBuilt } from "./pages/NotYetBuilt";
 import { Overview } from "./pages/Overview";
 import { ReadDocument } from "./pages/ReadDocument";
 import { Reset } from "./pages/Reset";
@@ -55,10 +54,11 @@ const Settlement = lazy(() =>
 import "./styles/shell.css";
 import "./styles/charts.css";
 
-/** Vite writes `/app/`; the router wants it without the trailing slash. */
+/** Vite writes a trailing slash; the router wants it without one. At the root that leaves "",
+ *  which is what `BrowserRouter` wants for "no prefix". */
 const BASENAME = import.meta.env.BASE_URL.replace(/\/$/, "");
 
-/** The sections that have been rebuilt here. Everything else still points at its twin. */
+/** What each section renders. The overview is the index route and so is not in here. */
 const BUILT: Record<string, ReactElement> = {
   "/rounds": <ReadDocument />,
   "/queue": <Queue />,
@@ -85,6 +85,16 @@ const client = new QueryClient({
 });
 
 const SECTIONS = NAV.filter((item) => item.path !== "/");
+
+// A nav item with no page would render `undefined` -- a blank panel inside a working shell, which
+// reads as a page that is loading rather than a page that does not exist. Checked once, at load,
+// so it is a startup error in front of whoever added the item.
+const UNBUILT = SECTIONS.filter((item) => !(item.path in BUILT)).map((item) => item.path);
+if (UNBUILT.length > 0) {
+  throw new Error(
+    `These sections are in the navigation with no page behind them: ${UNBUILT.join(", ")}`,
+  );
+}
 
 function Shell() {
   return (
@@ -120,7 +130,7 @@ export function App() {
               <Route element={<Shell />}>
                 <Route index element={<Overview />} />
                 {SECTIONS.map((item) => {
-                  const page = BUILT[item.path] ?? <NotYetBuilt item={item} />;
+                  const page = BUILT[item.path];
                   return (
                     <Route
                       key={item.path}

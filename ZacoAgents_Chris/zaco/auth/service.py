@@ -143,12 +143,13 @@ MINIMUM_PASSWORD = 12
 """Long enough to be worth the argon2 hash behind it. The same rule everywhere a password is
 set, because a reset that accepted a weaker one than an invitation did would be the way in."""
 
-RESET_PATH = "/app/reset"
+RESET_PATH = "/reset"
 """Where a reset link points.
 
-Under `/app` because that is where the React interface lives while the Jinja one still owns `/`.
-The one string, so the step that flips the app to `/` changes it here and nowhere else. A
-redirect at `/reset/<token>` catches anyone who reaches the old interface with a link.
+One string, in the module that mints the token rather than in the command and the route that
+print it, so a link that goes nowhere cannot be caused by two copies drifting apart. It is a path
+on the app itself: the recovery command turns it into a full URL with `--base-url`, because the
+server has no way of knowing what address the person will be typing it into.
 """
 
 RESET_VALID_FOR = timedelta(hours=4)

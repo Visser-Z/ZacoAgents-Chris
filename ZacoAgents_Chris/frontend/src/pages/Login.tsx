@@ -29,7 +29,7 @@ export function Login() {
 
   const destination = (location.state as CameFrom | null)?.from ?? "/";
 
-  // Already signed in. The current interface redirects here too, rather than offering a form that
+  // Already signed in. The page this replaced redirected here too, rather than offering a form that
   // would replace a working session with the same one.
   if (status === "signed-in") return <Navigate to={destination} replace />;
 

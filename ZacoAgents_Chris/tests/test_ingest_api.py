@@ -119,11 +119,3 @@ def test_an_account_without_ingest_cannot_upload(client: TestClient, db: Session
 
 def test_a_signed_out_caller_cannot_upload(client: TestClient) -> None:
     assert _upload(client, "AccountSales_382405.txt").status_code == 401
-
-
-def test_the_upload_page_is_gated_on_the_same_permission(client: TestClient, db: Session) -> None:
-    _make_user(db, "viewer@example.com", [Permission.VIEW_REPORTS])
-    client.post("/api/auth/login", json={"email": "viewer@example.com", "password": PASSWORD})
-    page = client.get("/rounds")
-    assert page.status_code == 200
-    assert "does not have the <code>ingest</code>" in page.text

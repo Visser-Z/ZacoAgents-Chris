@@ -1,5 +1,5 @@
 /* The shell: a left sidebar and the page beside it.
-   Colours are the ones already in `/static/app.css` -- this file adds no palette, only layout.
+   Colours are the ones already in `app.css` -- this file adds no palette, only layout.
    It is loaded on top of that stylesheet and reads its custom properties, so the two interfaces
    cannot drift apart in colour while both exist.
 

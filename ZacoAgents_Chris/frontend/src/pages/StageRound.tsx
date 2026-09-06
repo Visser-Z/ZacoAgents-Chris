@@ -1,7 +1,7 @@
 /**
  * A whole round, read together and shown as what it amounts to. Nothing is stored.
  *
- * The one thing here that the Jinja page does not do: every file is classified as it is chosen,
+ * The one thing here the page it replaced did not do: every file is classified as it is chosen,
  * before anything is staged. One unreadable document refuses the entire round -- staging the rest
  * would produce a picture that looks complete and is not -- so being told which file that is
  * *before* pressing the button is the difference between fixing one export and re-uploading five.

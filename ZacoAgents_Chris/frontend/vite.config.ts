@@ -11,8 +11,11 @@ import { defineConfig } from "vite";
 // sent unchanged and no backend setting has to be relaxed to work locally.
 export default defineConfig({
   plugins: [react()],
-  // Assets are requested under /app/, which is where FastAPI mounts the build.
-  base: "/app/",
+  // The app is the interface now, mounted at the root. Written out rather than left to default
+  // so that it is a visible decision: `BASENAME` in App.tsx reads it, and the router's basename
+  // and the asset URLs have to agree or a reload serves the page from a path the bundle is not
+  // under.
+  base: "/",
   build: {
     // Straight into the package FastAPI serves, so there is one artefact and no copy step.
     outDir: "../zaco/web/spa",
@@ -25,8 +28,6 @@ export default defineConfig({
         target: "http://localhost:8000",
         changeOrigin: false,
       },
-      // The stylesheet and the existing interface, so both are reachable from the dev server.
-      "/static": { target: "http://localhost:8000", changeOrigin: false },
     },
   },
 });

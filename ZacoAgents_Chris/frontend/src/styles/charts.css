@@ -1,5 +1,5 @@
 /* Charts, and the few page controls the ported pages need.
-   Colours come from the tokens `/static/app.css` defines; nothing here invents one. The data-mark
+   Colours come from the tokens `app.css` defines; nothing here invents one. The data-mark
    colours are not here at all -- they are in `charts/theme.ts`, beside the note saying which of
    them were run through the validator and against what surface. */
 

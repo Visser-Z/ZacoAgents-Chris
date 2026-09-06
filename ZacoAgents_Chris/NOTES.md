@@ -2,8 +2,8 @@
 
 ## What I built
 
-A Python 3.12 / FastAPI service over Postgres, API-first, with a thin Jinja + HTMX interface over
-its own `/api/*` endpoints. `docker compose up --build`, then <http://localhost:8000>;
+A Python 3.12 / FastAPI service over Postgres, API-first, with a React interface over its own
+`/api/*` endpoints, built into the image and served from the same origin. `docker compose up --build`, then <http://localhost:8000>;
 [docs/RUNNING.md](docs/RUNNING.md) has the detail and [docs/DECISIONS.md](docs/DECISIONS.md) has
 every call with what was rejected and why.
 
@@ -161,7 +161,9 @@ is R1,275 the operator would otherwise have to notice by hand.
 
 **A considered interface.** The pages are plain by choice — §12 says a plain one showing the right
 figures beats a handsome one showing the wrong ones — but plain is not the same as designed, and I
-would not claim the second.
+would not claim the second. The React port replaced the server-rendered pages and fixed what was
+plainly wrong rather than merely plain: the navigation never said which page you were on, `esc()`
+was pasted into eight files, and eighteen `window.alert()` calls were the error strategy.
 
 ## What I am unsure of
 

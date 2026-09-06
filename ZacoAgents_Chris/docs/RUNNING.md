@@ -65,8 +65,33 @@ pip install -e ".[dev]"
 copy .env.example .env                              # then edit it
 docker compose up -d db                             # or point DATABASE_URL at your own Postgres
 alembic upgrade head
+npm --prefix frontend ci && npm --prefix frontend run build
 uvicorn zaco.main:app --reload
 ```
+
+The `npm` line is not optional here. The interface is a built bundle, and there is no
+server-rendered fallback behind it any more -- without it uvicorn serves a working API and a 404
+at the root, and says so in the log rather than leaving you to guess.
+
+### Working on the interface
+
+```
+npm --prefix frontend run dev        # :5173, proxying /api to :8000
+```
+
+Sign in at <http://localhost:5173>. `localhost:5173` and `localhost:8000` are the **same site** --
+SameSite ignores the port -- so the session cookie is sent unchanged and nothing on the server has
+to be relaxed to work locally.
+
+After changing an endpoint's shape, regenerate the types with the API running:
+
+```
+npm --prefix frontend run types      # openapi.json -> src/api/schema.d.ts
+```
+
+That file is generated and committed, and nothing regenerates it automatically. It is committed so
+a clone typechecks without a running server; it is not automatic because a silent regeneration
+turns a breaking API change into a frontend that compiles against the break.
 
 ## Tests
 
@@ -176,8 +201,9 @@ zaco/ingest/           the five readers and the content-based classifier
 zaco/domain/           the grain: delivery -> consignment -> docket, and the workbook row
 zaco/resolve/          the queue: delivery notes, product codes, opening stock, disagreements
 zaco/workbook/         locating the operator's sheet and columns by header text, never position
-zaco/web/              the built-in interface: a thin client over those same endpoints
 zaco/db/               SQLAlchemy models; money is NUMERIC(14,2) and Decimal, never float
+zaco/web/spa/          where `npm run build` puts the interface; served at / (gitignored)
+frontend/              the React interface: a client over those same endpoints
 migrations/            Alembic
 tests/                 fixtures are the real files in data/, never tidied ones
 ```
@@ -188,5 +214,8 @@ a correction to a reader then improves the whole history instead of leaving stal
 What *is* stored is the part no document contains — the answers, each with a person's name on
 it.
 
-The interface calls only documented `/api/*` endpoints, so a React or Flutter frontend can be
-added later with nothing but CORS and the schema (D1).
+The interface calls only documented `/api/*` endpoints and holds no logic of its own, which is
+what made replacing it a matter of drawing the same answers differently (D1). It is served from
+the API's own origin rather than a separate host: the session is an HttpOnly `SameSite=lax`
+cookie and there is no CSRF token in this system, so a second origin would need
+`SameSite=None; Secure` and a CSRF layer built to go with it.

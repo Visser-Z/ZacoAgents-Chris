@@ -12,6 +12,7 @@ import os
 import shutil
 from collections.abc import Iterator
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import pytest
 from fastapi.testclient import TestClient
@@ -54,12 +55,43 @@ def _configure_environment(tmp_root: Path) -> None:
     shutil.copy(PRISTINE_BOOK, workbook / "account-sales-book.xlsx")
 
     from zaco.config import get_settings
+    from zaco.db import base
 
     get_settings.cache_clear()
+    # And the engine built from those settings. It is a module-level global created on first use,
+    # so clearing only the settings cache leaves a connection pool still bound to whatever URL was
+    # in force when something first asked for one. See `settings_env` for what that cost.
+    base._engine = None
+    base._SessionLocal = None
 
 
-@pytest.fixture(scope="session")
+def _must_be_a_test_database(url: str) -> str:
+    """Refuse to truncate anything that is not obviously a test database.
+
+    `clean_db` empties fourteen tables between cases. Pointed at the development database that is
+    not a slow test, it is the operator's staged rounds gone, and it looks like a passing suite
+    while it happens. The name is a crude check and that is the point: it costs nothing, it cannot
+    itself be wrong in an interesting way, and it stands between an ordinary mistake and data loss.
+    """
+    name = urlsplit(url).path.lstrip("/")
+    if not name.endswith("_test"):
+        raise RuntimeError(
+            f"The suite truncates tables between cases and will not do that to {name!r}. "
+            "Test databases are named with a `_test` suffix; set DATABASE_URL to one."
+        )
+    return url
+
+
+@pytest.fixture(scope="session", autouse=True)
 def settings_env(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Autouse, because ordering decided which database the suite destroyed.
+
+    This was requested only by the database fixtures, so a test that needed no database -- the SPA
+    mount ones build a `TestClient`, which runs the app's lifespan -- could run first, build the
+    engine from `zaco/config.py`'s default, and bind it to the *development* database. Every
+    `clean_db` after that truncated the wrong one. Running first, for every test, is what makes
+    that impossible rather than unlikely.
+    """
     root = tmp_path_factory.mktemp("zaco-data")
     _configure_environment(root)
     return root
@@ -98,6 +130,7 @@ def migrated(database_url: str) -> str:
 def clean_db(migrated: str) -> Iterator[None]:
     from zaco.db.base import get_engine
 
+    _must_be_a_test_database(migrated)
     engine = get_engine()
     with engine.begin() as connection:
         connection.execute(

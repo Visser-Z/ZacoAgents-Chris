@@ -37,7 +37,7 @@ COPY pyproject.toml ./
 RUN pip install --upgrade pip \
  && pip install "fastapi>=0.115" "uvicorn[standard]>=0.32" "sqlalchemy>=2.0.36" \
       "psycopg[binary]>=3.2" "alembic>=1.14" "pydantic>=2.9" "pydantic-settings>=2.6" \
-      "email-validator>=2.2" "jinja2>=3.1" "python-multipart>=0.0.17" "itsdangerous>=2.2" \
+      "email-validator>=2.2" "python-multipart>=0.0.17" "itsdangerous>=2.2" \
       "argon2-cffi>=23.1" "openpyxl>=3.1.5"
 
 COPY alembic.ini ./
@@ -50,8 +50,9 @@ COPY lookup ./lookup
 # the first time the stack comes up; this seeds it once, so a fresh clone has something to read
 # the delivery note series from instead of refusing to propose a number.
 COPY workbook/account-sales-book.xlsx ./seed/account-sales-book.xlsx
-# The built frontend, from the stage above. Served at /app beside the API, same origin, so the
-# session cookie needs no relaxing and there is no CORS or CSRF surface to add.
+# The built frontend, from the stage above. Served at / by the API itself, same origin, so the
+# session cookie needs no relaxing and there is no CORS or CSRF surface to add. Without this the
+# image has an API and no interface at all -- there is no server-rendered fallback any more.
 COPY --from=frontend /build/dist ./zaco/web/spa
 COPY entrypoint.sh ./
 RUN chmod +x entrypoint.sh

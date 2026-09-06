@@ -4,7 +4,8 @@
  * The widths are carried over unchanged from `app.css`: 62rem by default, 26rem for the two
  * pages that are a single form, and unbounded for the five that are a table wider than prose.
  * The title is set here rather than in each page so that a browser tab and a back-button history
- * entry say which page they are, which the current interface only manages because Jinja does it.
+ * entry say which page they are -- something the server-rendered pages got for free from Jinja
+ * and a single-page app has to do deliberately.
  */
 
 import { useEffect, type ReactNode } from "react";
