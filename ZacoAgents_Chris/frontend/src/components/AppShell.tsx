@@ -145,9 +145,17 @@ export function AppShell({ children }: { children: ReactNode }) {
 
         <div className="sidebar-foot">
           {can("admin") ? <NavRow item={ACCOUNTS} collapsed={railed} /> : null}
-          <div className="whoami" title={user?.email}>
+          {/* The name was a label; it is a link now, because your own account is the one page
+              with nowhere else to be reached from -- it is not in the navigation, and it is the
+              only place a password gets changed. */}
+          <NavLink
+            to="/account"
+            className="side-link whoami"
+            title={user?.email}
+          >
+            <Icon name="person" />
             <span className="side-label">{user?.display_name || user?.email}</span>
-          </div>
+          </NavLink>
           <button
             type="button"
             className="side-link sign-out"

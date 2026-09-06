@@ -22,12 +22,16 @@ import { RequireAuth, RequirePermission } from "./auth/guards";
 import { SessionProvider } from "./auth/session";
 import { ToastHost } from "./components/Toasts";
 import { Accept } from "./pages/Accept";
+import { Accounts } from "./pages/Accounts";
+import { Forgot } from "./pages/Forgot";
 import { Login } from "./pages/Login";
 import { NotFound } from "./pages/NotFound";
 import { NotYetBuilt } from "./pages/NotYetBuilt";
 import { Overview } from "./pages/Overview";
 import { ReadDocument } from "./pages/ReadDocument";
+import { Reset } from "./pages/Reset";
 import { StageRound } from "./pages/StageRound";
+import { YourAccount } from "./pages/YourAccount";
 
 /**
  * The four pages that draw charts are fetched when one is opened, not before.
@@ -106,6 +110,12 @@ export function App() {
             <Routes>
               <Route path="/login" element={<Login />} />
               <Route path="/accept/:token" element={<Accept />} />
+              {/* The two pages a person reaches when they cannot sign in. Outside the shell for
+                  the same reason as the login: guarding them would demand the session they are
+                  here to get back. `RESET_PATH` in `zaco/auth/service.py` is the other half of
+                  this address -- it is what the recovery command prints. */}
+              <Route path="/forgot" element={<Forgot />} />
+              <Route path="/reset/:token" element={<Reset />} />
 
               <Route element={<Shell />}>
                 <Route index element={<Overview />} />
@@ -125,11 +135,14 @@ export function App() {
                     />
                   );
                 })}
+                {/* Your own account needs no permission: it is the one page that is about you
+                    rather than about a round, and everybody has one. */}
+                <Route path="/account" element={<YourAccount />} />
                 <Route
                   path={ACCOUNTS.path}
                   element={
                     <RequirePermission needed="admin">
-                      <NotYetBuilt item={ACCOUNTS} />
+                      <Accounts />
                     </RequirePermission>
                   }
                 />

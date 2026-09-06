@@ -114,6 +114,34 @@ nothing if a shared account made the choice. See [DECISIONS.md](DECISIONS.md) D1
 
 No mail is sent. Copy the invitation link from the Accounts page and pass it on.
 
+### Forgotten passwords
+
+Three layers, and each exists because the one above it can run out.
+
+1. **You know your current password.** Change it on your own account page (the name at the foot of
+   the sidebar).
+2. **You do not.** Say so from the sign-in page. That sends nothing — there is no mail here — it
+   puts you on a list at the top of the Accounts page. An administrator opens your account, issues
+   a one-time link and hands it to you the way your invitation reached you. It works once and lasts
+   four hours.
+3. **No administrator can sign in either.** With two administrators this is unlikely and not
+   impossible, and until it existed there was no path at all: the first account is seeded only on
+   an empty database, and an existing password is never reset. From the server:
+
+   ```
+   docker compose exec app python -m zaco.recover you@example.com
+   ```
+
+   It prints the same one-time link. There is no endpoint for this and nothing imports the module —
+   it asks for possession of the server rather than of an account, and whoever has that already
+   holds the database it reads and the workbook the system exists to write. It prints a link rather
+   than setting a password, so the new password is typed by the person who will use it and never
+   lands in a shell history. Pass `--base-url https://…` when the app is not on localhost.
+
+Every one of these is written into that account's trail, at the foot of the Accounts page —
+including a change of the address an account signs in with, which demands a typed reason because
+it rewrites who every past decision appears to have come from.
+
 ## Working a round
 
 1. **Stage a round** (`/staged`) reads a set of documents and shows what they amount to. Nothing

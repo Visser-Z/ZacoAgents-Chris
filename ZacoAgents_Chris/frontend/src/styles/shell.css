@@ -145,16 +145,11 @@
   text-overflow: ellipsis;
 }
 
+/* The account row. It is a `.side-link` like the rest, and only recedes: it says who you are
+   rather than offering a section, so it should not read as loud as the navigation above it. */
 .whoami {
-  padding: 0.5rem 0.6rem 0.15rem;
   color: var(--muted);
   font-size: 0.86em;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.whoami .side-label {
-  display: block;
 }
 
 .icon-button {
@@ -177,8 +172,7 @@
 
 /* --- collapsed to a rail ------------------------------------------------------------------- */
 
-.railed .side-label,
-.railed .whoami {
+.railed .side-label {
   display: none;
 }
 
@@ -262,8 +256,7 @@
     transform: none;
   }
 
-  .railed .side-label,
-  .railed .whoami {
+  .railed .side-label {
     display: revert;
   }
 

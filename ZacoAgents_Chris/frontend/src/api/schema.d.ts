@@ -97,6 +97,77 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/auth/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Set Own Password
+         * @description Change your own password, having proved you know the current one.
+         *
+         *     The session is re-issued afterwards. Not doing so would leave the cookie minted against the
+         *     old password still working, which is the opposite of what somebody changing a password after
+         *     a scare is asking for.
+         */
+        post: operations["set_own_password_api_auth_password_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/forgot": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Forgot
+         * @description Say you cannot get in.
+         *
+         *     Answers the same way whether or not that address has an account, and takes the same route
+         *     through the code either way. A page that said "no such account" would be a way to find out
+         *     who works here, one address at a time.
+         *
+         *     Nothing is sent: there is no mail in this system by design (D3), so this records the request
+         *     and an administrator hands over the link, exactly as an invitation already reaches somebody.
+         */
+        post: operations["forgot_api_auth_forgot_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/auth/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset
+         * @description Spend a reset link on a new password, and sign in with it.
+         */
+        post: operations["reset_api_auth_reset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/users": {
         parameters: {
             query?: never;
@@ -178,6 +249,149 @@ export interface paths {
         post?: never;
         /** Revoke Invitation */
         delete: operations["revoke_invitation_api_admin_invitations__invitation_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/users/{user_id}/profile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Profile
+         * @description The name shown beside every queue answer, DN approval and append.
+         *
+         *     Editable because it was previously set once, when the invitation was accepted, and never
+         *     again -- so a name typed wrong that first time was wrong on every decision afterwards.
+         */
+        put: operations["set_profile_api_admin_users__user_id__profile_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/users/{user_id}/email": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set Email
+         * @description Change the address an account signs in with.
+         *
+         *     This is the account's identity, and every queue answer, DN approval and append already in the
+         *     record is stamped with it. So it demands a typed reason and is written into the account's own
+         *     trail: without that, a name changing across the history has no explanation attached to it
+         *     anywhere, and D14's whole argument for named accounts is that somebody can be asked.
+         */
+        put: operations["set_email_api_admin_users__user_id__email_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/users/{user_id}/password-reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reset Password
+         * @description Hand out a one-time link that lets somebody set a new password.
+         *
+         *     Returned once, to the administrator who asked for it, and never listed again. There is no mail
+         *     in this system by design (D3), so they carry it to the person -- which is how an invitation
+         *     already reaches somebody.
+         *
+         *     An administrator may do this for their own account too. That is not a hole: they are signed in
+         *     with the standing to do it to anybody, so refusing would protect nothing and would only push
+         *     the ordinary case towards the recovery command.
+         */
+        post: operations["reset_password_api_admin_users__user_id__password_reset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/password-requests": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Password Requests
+         * @description Who has said they cannot get in, and has not been given a link yet.
+         */
+        get: operations["password_requests_api_admin_password_requests_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/invitations/{invitation_id}/reissue": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reissue Invitation
+         * @description Give an invitation that has run out a fresh token and a fresh week.
+         *
+         *     The same row rather than a second one to the same address: two open invitations to one person
+         *     means two accounts could be made from them, and the second would be refused halfway through
+         *     somebody typing a password.
+         */
+        post: operations["reissue_invitation_api_admin_invitations__invitation_id__reissue_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Events
+         * @description What has been done to accounts, newest first.
+         *
+         *     Rounds have carried a trail since Phase 3. Accounts decide the identity behind every entry in
+         *     that trail and carried none of their own until now.
+         */
+        get: operations["events_api_admin_events_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -792,6 +1006,35 @@ export interface components {
              */
             display_name: string;
         };
+        /** AccountEventOut */
+        AccountEventOut: {
+            /** User Id */
+            user_id: number;
+            /** Email */
+            email: string;
+            /** Action */
+            action: string;
+            /**
+             * Detail
+             * @default
+             */
+            detail: string;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+            /**
+             * At
+             * Format: date-time
+             */
+            at: string;
+            /**
+             * By
+             * @default
+             */
+            by: string;
+        };
         /** AccountSaleOut */
         AccountSaleOut: {
             /** Number */
@@ -993,6 +1236,13 @@ export interface components {
             net: string;
             /** Returns Reportable */
             returns_reportable: boolean;
+        };
+        /** ChangePasswordIn */
+        ChangePasswordIn: {
+            /** Current Password */
+            current_password: string;
+            /** New Password */
+            new_password: string;
         };
         /**
          * ConductChartOut
@@ -1205,6 +1455,19 @@ export interface components {
             /** Withdrawn At */
             withdrawn_at?: string | null;
         };
+        /** EmailIn */
+        EmailIn: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /**
+             * Reason
+             * @default
+             */
+            reason: string;
+        };
         /**
          * EventOut
          * @description Something a person did to this round after it was uploaded.
@@ -1223,6 +1486,14 @@ export interface components {
             at: string;
             /** By */
             by?: string | null;
+        };
+        /** ForgotIn */
+        ForgotIn: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
         };
         /** GroupTotalOut */
         GroupTotalOut: {
@@ -1625,6 +1896,11 @@ export interface components {
             /** Days On Market */
             days_on_market?: number | null;
         };
+        /** ProfileIn */
+        ProfileIn: {
+            /** Display Name */
+            display_name: string;
+        };
         /**
          * QueueItemOut
          * @description One open question, with the evidence it was raised on.
@@ -1861,6 +2137,47 @@ export interface components {
                 [key: string]: string;
             };
             chart?: components["schemas"]["ReportChartOut"];
+        };
+        /** ResetIn */
+        ResetIn: {
+            /** Token */
+            token: string;
+            /** Password */
+            password: string;
+        };
+        /**
+         * ResetOut
+         * @description A one-time link, and nothing that would let it be reconstructed.
+         *
+         *     The URL is returned once, to the administrator who asked for it, because there is no mail in
+         *     this system to send it with -- they carry it to the person. It is never listed again.
+         */
+        ResetOut: {
+            /** User Id */
+            user_id: number;
+            /** Email */
+            email: string;
+            /** Reset Url */
+            reset_url: string;
+            /**
+             * Expires At
+             * Format: date-time
+             */
+            expires_at: string;
+        };
+        /**
+         * ResetRequestOut
+         * @description Somebody saying they cannot get in. Carries no token and grants nothing.
+         */
+        ResetRequestOut: {
+            /** User Id */
+            user_id: number;
+            /** Email */
+            email: string;
+            /** Display Name */
+            display_name: string;
+            /** Requested At */
+            requested_at?: string | null;
         };
         /**
          * ResolvedRowOut
@@ -2623,6 +2940,119 @@ export interface operations {
             };
         };
     };
+    set_own_password_api_auth_password_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
+            /** @description No session, or one that has expired. Sign in first. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Signed in, but the account does not hold the permission this endpoint needs. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    forgot_api_auth_forgot_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ForgotIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Message"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_api_auth_reset_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_users_api_admin_users_get: {
         parameters: {
             query?: never;
@@ -2878,6 +3308,266 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+        };
+    };
+    set_profile_api_admin_users__user_id__profile_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserOut"];
+                };
+            };
+            /** @description No session, or one that has expired. Sign in first. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Signed in, but the account does not hold the permission this endpoint needs. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_email_api_admin_users__user_id__email_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["EmailIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserOut"];
+                };
+            };
+            /** @description No session, or one that has expired. Sign in first. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Signed in, but the account does not hold the permission this endpoint needs. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reset_password_api_admin_users__user_id__password_reset_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["ReasonIn"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResetOut"];
+                };
+            };
+            /** @description No session, or one that has expired. Sign in first. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Signed in, but the account does not hold the permission this endpoint needs. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    password_requests_api_admin_password_requests_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResetRequestOut"][];
+                };
+            };
+            /** @description No session, or one that has expired. Sign in first. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Signed in, but the account does not hold the permission this endpoint needs. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    reissue_invitation_api_admin_invitations__invitation_id__reissue_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                invitation_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["InvitationOut"];
+                };
+            };
+            /** @description No session, or one that has expired. Sign in first. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Signed in, but the account does not hold the permission this endpoint needs. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    events_api_admin_events_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccountEventOut"][];
+                };
+            };
+            /** @description No session, or one that has expired. Sign in first. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Signed in, but the account does not hold the permission this endpoint needs. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

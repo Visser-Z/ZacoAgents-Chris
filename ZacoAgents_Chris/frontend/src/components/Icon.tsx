@@ -20,6 +20,7 @@ export type IconName =
   | "reports"
   | "conduct"
   | "accounts"
+  | "person"
   | "signout"
   | "collapse"
   | "expand"
@@ -37,6 +38,9 @@ const PATHS: Record<IconName, string> = {
   reports: "M4 20h16M7.5 20V11m4.5 9V5m4.5 15v-6",
   conduct: "M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14M20 20l-4.1-4.1",
   accounts: "M9 12a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7M3.5 20a5.5 5.5 0 0 1 11 0M16 5.3a3.5 3.5 0 0 1 0 6.4M17.5 14.6a5.5 5.5 0 0 1 3 5.4",
+  // One person, where `accounts` is a group. They sit next to each other at the foot of the
+  // sidebar, and two of the same glyph there says the two rows go to the same place.
+  person: "M12 12.5a4 4 0 1 0 0-8 4 4 0 0 0 0 8M5 20.5a7 7 0 0 1 14 0",
   signout: "M12 4v8M7.8 6.8a7 7 0 1 0 8.4 0",
   collapse: "M14.5 6 8.5 12l6 6",
   expand: "M9.5 6l6 6-6 6",

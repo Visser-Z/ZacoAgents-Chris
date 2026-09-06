@@ -8,7 +8,7 @@
  */
 
 import { useState, type FormEvent } from "react";
-import { Navigate, useLocation, useNavigate } from "react-router";
+import { Link, Navigate, useLocation, useNavigate } from "react-router";
 
 import { ApiError, api } from "../api/client";
 import { Page } from "../components/Page";
@@ -81,6 +81,9 @@ export function Login() {
             {busy ? "Signing in…" : "Sign in"}
           </button>
         </form>
+        <p style={{ marginBottom: 0 }}>
+          <Link to="/forgot">Forgotten your password?</Link>
+        </p>
       </div>
 
       <p className="muted" style={{ fontSize: "0.9em" }}>
