@@ -39,7 +39,15 @@ import { useToast } from "../components/Toasts";
 import { Question, type Answer } from "../queue/Question";
 import { RoundDetail } from "../queue/RoundDetail";
 
-function RoundList({ onOpen, openId }: { onOpen: (id: number) => void; openId: number | null }) {
+function RoundList({
+  onOpen,
+  onHide,
+  openId,
+}: {
+  onOpen: (id: number) => void;
+  onHide: () => void;
+  openId: number | null;
+}) {
   const rounds = useRounds();
 
   if (rounds.isPending) return <Loading what="the rounds" />;
@@ -78,9 +86,18 @@ function RoundList({ onOpen, openId }: { onOpen: (id: number) => void; openId: n
               <td className="num">{round.open_questions || ""}</td>
               <td>{round.status}</td>
               <td>
-                <button type="button" className="link" onClick={() => onOpen(round.id)}>
-                  Open
-                </button>
+                {/* The same control both ways round. A row that is already showing offering
+                    "Open" is a button that does nothing, and it leaves the only way out of a
+                    round being to pick a different one. */}
+                {round.id === openId ? (
+                  <button type="button" className="link" onClick={onHide}>
+                    Hide
+                  </button>
+                ) : (
+                  <button type="button" className="link" onClick={() => onOpen(round.id)}>
+                    Open
+                  </button>
+                )}
               </td>
             </tr>
           ))}
@@ -141,6 +158,20 @@ export function Queue() {
   function open(next: number) {
     const merged = new URLSearchParams(params);
     merged.set("round", String(next));
+    setParams(merged, { replace: false });
+  }
+
+  /**
+   * Stop showing the round. Deliberately not called `close`: `RoundDetail` already has a "Close
+   * the queue" button, which is a decision recorded against the round and cannot be undone by
+   * looking away. This one only changes what is on the screen.
+   *
+   * It goes through the address bar like `open` does, so the back button steps out of a round the
+   * same way it steps into one.
+   */
+  function hide() {
+    const merged = new URLSearchParams(params);
+    merged.delete("round");
     setParams(merged, { replace: false });
   }
 
@@ -235,7 +266,7 @@ export function Queue() {
           {start.isPending ? "Saving…" : "Save the round"}
         </button>
         <div style={{ marginTop: "1rem" }}>
-          <RoundList onOpen={open} openId={openId} />
+          <RoundList onOpen={open} onHide={hide} openId={openId} />
         </div>
       </div>
 
@@ -245,9 +276,16 @@ export function Queue() {
         <Problem error={round.error} />
       ) : round.data ? (
         <>
-          <h2>
-            Round #{round.data.summary.id}{" "}
-            <span className="muted">({round.data.summary.status})</span>
+          <h2 className="round-heading">
+            <span>
+              Round #{round.data.summary.id}{" "}
+              <span className="muted">({round.data.summary.status})</span>
+            </span>
+            {/* Beside the heading as well as in the list, because by the time somebody wants to
+                put this away they have scrolled past the list to read it. */}
+            <button type="button" className="link" onClick={hide}>
+              Hide this round
+            </button>
           </h2>
           <div className={round.data.is_clear ? "notice" : "warning"}>
             {round.data.is_clear

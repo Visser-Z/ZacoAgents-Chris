@@ -1,0 +1,75 @@
+/* The overview's cards.
+
+   Colours and surfaces are `app.css`'s; nothing here invents one. What this file adds is the
+   grid and the card, and both are deliberately plain: this page is a way through to the other
+   eight, and a landing page that competes with what it is introducing has misunderstood its job
+   (§12 -- a plain interface showing the right figures). */
+
+.views {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15.5rem, 1fr));
+  gap: 0.9rem;
+  margin-bottom: 1.6rem;
+}
+
+.view-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.9rem 1rem 1rem;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--ink);
+  text-decoration: none;
+  /* Only the border and a hairline lift move on hover. A card that grows or shadows heavily
+     makes the grid jump under the pointer while somebody is reading across it. */
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+
+.view-card:hover,
+.view-card:focus-visible {
+  border-color: var(--accent);
+  box-shadow: 0 1px 4px rgba(27, 29, 30, 0.08);
+}
+
+.view-card-head {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.view-card-head .icon {
+  flex: 0 0 auto;
+  color: var(--accent);
+}
+
+.view-card-name {
+  font-weight: 600;
+}
+
+.view-card p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.9em;
+  line-height: 1.45;
+}
+
+/* The figure sits at the bottom of the card whatever the sentence above it runs to, so a row of
+   cards has its numbers on one line and can be read across rather than card by card. */
+.view-card-figure {
+  margin-top: auto;
+  padding-top: 0.55rem;
+  font-size: 0.9em;
+  font-variant-numeric: tabular-nums;
+}
+
+.view-card-figure strong {
+  color: var(--ink);
+}
+
+.view-card-figure.quiet {
+  color: var(--muted);
+}

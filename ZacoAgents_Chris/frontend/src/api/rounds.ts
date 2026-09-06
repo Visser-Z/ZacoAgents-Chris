@@ -29,10 +29,13 @@ export type DeliveryNote = Schemas["DeliveryNoteOut"];
 export const roundsKey = ["rounds"] as const;
 export const roundKey = (id: number) => ["round", id] as const;
 
-export function useRounds() {
+/** `enabled` is for the overview, which shows this list's figures on two cards and should not
+ *  fetch it for an account that is offered neither. Everywhere else it is simply on. */
+export function useRounds({ enabled = true }: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: roundsKey,
     queryFn: () => api.get<RoundSummary[]>("/api/rounds"),
+    enabled,
   });
 }
 

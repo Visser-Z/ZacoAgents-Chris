@@ -304,3 +304,18 @@
     transition: none;
   }
 }
+
+/* The queue's round heading, which carries the way back out of the round beside its name. The
+   button sits on the baseline of the heading rather than under it, so it reads as belonging to
+   that heading and not to the panel below. */
+.round-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.round-heading button {
+  font-size: 0.62em;
+  font-weight: 400;
+}
