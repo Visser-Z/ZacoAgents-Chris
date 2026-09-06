@@ -5,14 +5,25 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
-from zaco.api.schemas import AcceptIn, LoginIn, Message, UserOut
+from zaco.api.schemas import (
+    AcceptIn,
+    ChangePasswordIn,
+    ForgotIn,
+    LoginIn,
+    Message,
+    ResetIn,
+    UserOut,
+)
 from zaco.auth.deps import current_user
 from zaco.auth.service import (
     SESSION_COOKIE,
     AuthError,
     accept_invitation,
     authenticate,
+    change_password,
     issue_session,
+    request_reset,
+    use_reset,
 )
 from zaco.config import get_settings
 from zaco.db.base import get_db
@@ -107,4 +118,62 @@ def accept(
 
 @router.get("/me", response_model=UserOut)
 def me(user: User = Depends(current_user)) -> UserOut:
+    return _to_out(user)
+
+
+# --- Getting back in ---------------------------------------------------------------------------
+
+
+@router.post("/password", response_model=Message)
+def set_own_password(
+    payload: ChangePasswordIn,
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    user: User = Depends(current_user),
+) -> Message:
+    """Change your own password, having proved you know the current one.
+
+    The session is re-issued afterwards. Not doing so would leave the cookie minted against the
+    old password still working, which is the opposite of what somebody changing a password after
+    a scare is asking for.
+    """
+    try:
+        change_password(db, user, payload.current_password, payload.new_password)
+    except AuthError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    _set_session(response, user, request)
+    return Message(detail="Your password has been changed.")
+
+
+@router.post("/forgot", response_model=Message)
+def forgot(payload: ForgotIn, db: Session = Depends(get_db)) -> Message:
+    """Say you cannot get in.
+
+    Answers the same way whether or not that address has an account, and takes the same route
+    through the code either way. A page that said "no such account" would be a way to find out
+    who works here, one address at a time.
+
+    Nothing is sent: there is no mail in this system by design (D3), so this records the request
+    and an administrator hands over the link, exactly as an invitation already reaches somebody.
+    """
+    request_reset(db, payload.email)
+    return Message(
+        detail=(
+            "If that address has an account, an administrator can now see that you are waiting "
+            "and can give you a link to set a new password. Ask them for it."
+        )
+    )
+
+
+@router.post("/reset", response_model=UserOut)
+def reset(
+    payload: ResetIn, request: Request, response: Response, db: Session = Depends(get_db)
+) -> UserOut:
+    """Spend a reset link on a new password, and sign in with it."""
+    try:
+        user = use_reset(db, payload.token, payload.password)
+    except AuthError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    _set_session(response, user, request)
     return _to_out(user)

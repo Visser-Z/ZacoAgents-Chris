@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from zaco.auth.permissions import ALL_PERMISSIONS, Permission
 from zaco.config import Settings, get_settings
-from zaco.db.models import Invitation, User, utcnow
+from zaco.db.models import AccountEvent, Invitation, PasswordReset, User, utcnow
 
 SESSION_COOKIE = "zaco_session"
 _hasher = PasswordHasher()
@@ -133,6 +133,171 @@ def accept_invitation(db: Session, token: str, password: str, display_name: str 
     )
     db.add(user)
     invitation.accepted_at = utcnow()
+    db.flush()
+    return user
+
+
+# --- Passwords, and the ways back into an account ---------------------------------------------
+
+MINIMUM_PASSWORD = 12
+"""Long enough to be worth the argon2 hash behind it. The same rule everywhere a password is
+set, because a reset that accepted a weaker one than an invitation did would be the way in."""
+
+RESET_PATH = "/app/reset"
+"""Where a reset link points.
+
+Under `/app` because that is where the React interface lives while the Jinja one still owns `/`.
+The one string, so the step that flips the app to `/` changes it here and nowhere else. A
+redirect at `/reset/<token>` catches anyone who reaches the old interface with a link.
+"""
+
+RESET_VALID_FOR = timedelta(hours=4)
+"""Short, because a reset link is carried by hand and used within minutes of being handed over.
+An invitation lasts a week because it is sent to somebody who may be away; a reset is issued
+because somebody is standing there unable to work."""
+
+
+def check_password(password: str) -> None:
+    if len(password) < MINIMUM_PASSWORD:
+        raise AuthError(f"Use at least {MINIMUM_PASSWORD} characters.")
+
+
+def record(
+    db: Session,
+    user: User,
+    action: str,
+    detail: str = "",
+    reason: str = "",
+    by: User | None = None,
+    by_label: str = "",
+) -> AccountEvent:
+    """Write down what was done to an account."""
+    event = AccountEvent(
+        user_id=user.id,
+        action=action,
+        detail=detail,
+        reason=reason,
+        by_id=by.id if by is not None else None,
+        by_label=by_label or (by.email if by is not None else ""),
+    )
+    db.add(event)
+    db.flush()
+    return event
+
+
+def change_password(db: Session, user: User, current: str, new: str) -> None:
+    """Change your own password, having proved you know the old one.
+
+    The old password is required even though the session already proves who you are: a session is
+    a cookie on a machine, and an unattended machine is the case this check exists for.
+    """
+    if not verify_password(user.password_hash, current):
+        raise AuthError("That is not your current password.")
+    check_password(new)
+    if verify_password(user.password_hash, new):
+        raise AuthError("That is the password you already have.")
+    user.password_hash = hash_password(new)
+    record(db, user, "password changed", "by the account holder", by=user)
+    db.flush()
+
+
+def request_reset(db: Session, email: str) -> None:
+    """Note that somebody says they cannot get in.
+
+    Returns nothing at all, whether or not the address has an account. The caller says the same
+    sentence either way: a page that answered differently would be a way to find out who has an
+    account here, and every account is a named person.
+
+    A request grants nothing. It is a note for whoever can issue the link.
+    """
+    user = get_user_by_email(db, email)
+    if user is None:
+        return
+    already = (
+        db.execute(
+            select(PasswordReset)
+            .where(PasswordReset.user_id == user.id)
+            .where(PasswordReset.token.is_(None))
+            .where(PasswordReset.used_at.is_(None))
+        )
+        .scalars()
+        .first()
+    )
+    if already is not None:
+        # Asking twice is not two problems, and a list of the same request eight times is a list
+        # nobody reads.
+        return
+    db.add(PasswordReset(user_id=user.id, requested_at=utcnow()))
+    db.flush()
+
+
+def issue_reset(
+    db: Session,
+    user: User,
+    *,
+    issued_by: User | None,
+    via: str,
+    reason: str = "",
+    valid_for: timedelta = RESET_VALID_FOR,
+) -> PasswordReset:
+    """Hand out a one-time link that sets a new password.
+
+    Any request outstanding for this account is answered by the same row rather than left
+    standing, so the list of people waiting is a list of people still waiting.
+    """
+    waiting = (
+        db.execute(
+            select(PasswordReset)
+            .where(PasswordReset.user_id == user.id)
+            .where(PasswordReset.token.is_(None))
+            .where(PasswordReset.used_at.is_(None))
+        )
+        .scalars()
+        .first()
+    )
+
+    reset = waiting or PasswordReset(user_id=user.id)
+    reset.token = secrets.token_urlsafe(32)
+    reset.issued_at = utcnow()
+    reset.issued_by_id = issued_by.id if issued_by is not None else None
+    reset.issued_via = via
+    reset.reason = reason.strip()
+    reset.expires_at = datetime.now(UTC) + valid_for
+    db.add(reset)
+    record(
+        db,
+        user,
+        "password reset issued",
+        f"a one-time link, valid until {reset.expires_at:%Y-%m-%d %H:%M} UTC",
+        reason=reason.strip(),
+        by=issued_by,
+        by_label=via,
+    )
+    db.flush()
+    return reset
+
+
+def use_reset(db: Session, token: str, password: str) -> User:
+    """Spend a reset link on a new password.
+
+    A used link is spent whether or not the account was already reachable another way, and an
+    inactive account is refused here rather than let in: deactivating somebody is meant to stop
+    them working, and a reset link that walked past that would undo it silently.
+    """
+    reset = db.execute(
+        select(PasswordReset).where(PasswordReset.token == token)
+    ).scalar_one_or_none()
+    if reset is None or not reset.is_open:
+        raise AuthError("That link is not valid any more. Ask for a new one.")
+    check_password(password)
+
+    user = reset.user
+    if not user.is_active:
+        raise AuthError("That account is not active. An administrator can turn it back on.")
+
+    user.password_hash = hash_password(password)
+    reset.used_at = utcnow()
+    record(db, user, "password reset used", f"issued by {reset.issued_via}", by=user)
     db.flush()
     return user
 

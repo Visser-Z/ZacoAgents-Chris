@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from zaco.auth.deps import current_user_optional
 from zaco.auth.permissions import ALL_PERMISSIONS, DESCRIPTIONS, Permission
+from zaco.auth.service import RESET_PATH
 from zaco.db.base import get_db
 from zaco.db.models import Invitation, User
 from zaco.ingest.records import TITLES
@@ -56,6 +57,16 @@ def login_page(
     if user is not None:
         return RedirectResponse("/", status_code=303)
     return _page(request, "login.html", None)
+
+
+@router.get("/reset/{token}", response_model=None)
+def reset_page(token: str) -> RedirectResponse:
+    """A reset link, wherever it was typed, ends up at the page that can spend it.
+
+    The page itself is on the React interface. This exists so a link opened against the interface
+    at `/` is not a dead end while both are running; it goes when the Jinja pages do.
+    """
+    return RedirectResponse(f"{RESET_PATH}/{token}", status_code=303)
 
 
 @router.get("/accept/{token}", response_model=None)

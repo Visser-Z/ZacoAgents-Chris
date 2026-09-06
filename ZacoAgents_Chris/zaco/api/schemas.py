@@ -63,6 +63,61 @@ class ActiveIn(BaseModel):
     is_active: bool
 
 
+class ChangePasswordIn(BaseModel):
+    current_password: str
+    new_password: str
+
+
+class ForgotIn(BaseModel):
+    email: EmailStr
+
+
+class ResetIn(BaseModel):
+    token: str
+    password: str
+
+
+class ResetOut(BaseModel):
+    """A one-time link, and nothing that would let it be reconstructed.
+
+    The URL is returned once, to the administrator who asked for it, because there is no mail in
+    this system to send it with -- they carry it to the person. It is never listed again.
+    """
+
+    user_id: int
+    email: str
+    reset_url: str
+    expires_at: datetime
+
+
+class ResetRequestOut(BaseModel):
+    """Somebody saying they cannot get in. Carries no token and grants nothing."""
+
+    user_id: int
+    email: str
+    display_name: str
+    requested_at: datetime | None = None
+
+
+class ProfileIn(BaseModel):
+    display_name: str
+
+
+class EmailIn(BaseModel):
+    email: EmailStr
+    reason: str = ""
+
+
+class AccountEventOut(BaseModel):
+    user_id: int
+    email: str
+    action: str
+    detail: str = ""
+    reason: str = ""
+    at: datetime
+    by: str = ""
+
+
 class Message(BaseModel):
     detail: str
 

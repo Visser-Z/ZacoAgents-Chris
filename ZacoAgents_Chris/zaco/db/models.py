@@ -93,6 +93,88 @@ class Invitation(Base):
         return expires > utcnow()
 
 
+class PasswordReset(Base):
+    """A way back into an account whose password is gone.
+
+    One table for two states, because they are two ends of the same thing and the trail is only
+    useful whole. A **request** is somebody saying they cannot get in: it has no token and grants
+    nothing. An **issue** is somebody with the standing to do it handing over a one-time link.
+
+    Nothing here is ever sent anywhere. There is no mail in this system by design (D3: it runs
+    offline from `docker compose up`), so a link is carried by the person who issued it -- which
+    is exactly how an invitation already reaches somebody.
+    """
+
+    __tablename__ = "password_resets"
+    __table_args__ = (UniqueConstraint("token", name="uq_password_resets_token"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+
+    token: Mapped[str | None] = mapped_column(String(64), default=None)
+    """`None` while this is only a request. Set when a link is actually issued."""
+
+    requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    issued_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    issued_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), default=None
+    )
+    issued_via: Mapped[str] = mapped_column(String(60), default="")
+    """How it was issued, in words. The recovery command has no account to be, and "nobody"
+    would be the wrong thing to record for something only the server's owner can run."""
+
+    reason: Mapped[str] = mapped_column(Text, default="")
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    used_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+
+    user: Mapped[User] = relationship(foreign_keys=[user_id])
+    issued_by: Mapped[User | None] = relationship(foreign_keys=[issued_by_id])
+
+    @property
+    def is_open(self) -> bool:
+        """Usable right now: issued, unused, and not expired."""
+        if self.token is None or self.used_at is not None or self.expires_at is None:
+            return False
+        expires = self.expires_at
+        if expires.tzinfo is None:
+            expires = expires.replace(tzinfo=UTC)
+        return expires > utcnow()
+
+    @property
+    def is_waiting(self) -> bool:
+        """Somebody asked and nobody has issued anything yet."""
+        return self.token is None and self.used_at is None
+
+
+class AccountEvent(Base):
+    """What was done to an account, by whom, and why.
+
+    Rounds have carried a trail since Phase 3; accounts have not, and they are where the identity
+    behind every one of those entries is decided. Changing an email rewrites who a person appears
+    to be across the whole record, so it is written down rather than done quietly.
+
+    `by_label` exists for the same reason `PasswordReset.issued_via` does: the recovery command
+    acts with nobody's account, and leaving the actor blank would read as an unattributed change
+    rather than a deliberately unattributable one.
+    """
+
+    __tablename__ = "account_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    action: Mapped[str] = mapped_column(String(60))
+    detail: Mapped[str] = mapped_column(Text, default="")
+    reason: Mapped[str] = mapped_column(Text, default="")
+    at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), default=None
+    )
+    by_label: Mapped[str] = mapped_column(String(120), default="")
+
+    user: Mapped[User] = relationship(foreign_keys=[user_id])
+    by: Mapped[User | None] = relationship(foreign_keys=[by_id])
+
+
 # --- Phase 3: the durable record of what was decided ------------------------------------------
 
 
