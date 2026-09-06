@@ -1,22 +1,63 @@
+# What never reaches the build context.
+#
+# Read from the *context root*, which `render.yaml` sets to `ZacoAgents_Chris`, so this file
+# governs the hosted build as well as the local one.
+#
+# Two different reasons appear below and they are worth keeping apart. Most entries are things
+# the image does not need -- they would be uploaded, hashed and thrown away. A few are things that
+# would be actively wrong to ship: a local `.env`, or a frontend bundle built on somebody's laptop
+# instead of by the `frontend` stage.
+
+# --- version control and local tooling ----------------------------------------------------------
 .git
+.gitignore
+.gitattributes
+.vscode
 .venv
 venv
+
+# --- Python build and cache droppings -----------------------------------------------------------
 __pycache__
 *.py[cod]
 .pytest_cache
 .mypy_cache
 .ruff_cache
+htmlcov
+.coverage
+*.egg-info
+
+# --- secrets ------------------------------------------------------------------------------------
+# `.env` is a *local* file. Hosted configuration comes from the environment (D3), and an `.env`
+# baked into an image would silently win over it.
 .local
 .env
 .env.*
 !.env.example
-.vscode
-htmlcov
-.coverage
+
+# --- build artefacts that must be made inside the image, not copied in ---------------------------
 node_modules
 frontend/node_modules
 frontend/dist
-# Built inside the image by the frontend stage, never copied from the host: a developer's local
-# build would otherwise ship instead of the one this Dockerfile made.
+# The bundle. Built by the `frontend` stage from source; a developer's local build would otherwise
+# ship instead of the one this Dockerfile made, and the two are not always the same.
 zaco/web/spa
 *.tsbuildinfo
+
+# --- not part of the application ----------------------------------------------------------------
+# None of this is COPYed by the Dockerfile. It is excluded so it is not uploaded and hashed on
+# every deploy, and so a change to a document does not invalidate the build cache.
+tests
+PersonalTest
+docs
+*.md
+docker
+docker-compose.yml
+render.yaml
+
+# The supplied agent reports. They are the exercise's input and the fixtures the suite reads; the
+# running system is given documents through the interface, and reads nothing from here.
+data
+
+# The blank workbook template. Only `workbook/account-sales-book.xlsx` is COPYed, as the seed for
+# an empty disk.
+workbook/template.xlsx

@@ -157,7 +157,10 @@ missing piece is a screen that says *these appended rows have a blank the record
 offering it as a fresh append rather than an edit. That is the first thing I would build next: it
 is R1,275 the operator would otherwise have to notice by hand.
 
-**Hosting.** The stack runs locally end to end; `render.yaml` is written and unexercised.
+**Hosting.** The stack runs locally end to end, and `render.yaml` is being taken to Render now.
+The one thing it could not have been right about until somebody tried it: this application is a
+*subdirectory* of its repository, and Render resolves the Docker paths from the repository root
+whatever `rootDir` says. See [docs/RUNNING.md](docs/RUNNING.md).
 
 **A considered interface.** The pages are plain by choice — §12 says a plain one showing the right
 figures beats a handsome one showing the wrong ones — but plain is not the same as designed, and I

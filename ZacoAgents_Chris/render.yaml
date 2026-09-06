@@ -1,16 +1,41 @@
 # The hosted target. Written in Phase 0 but deliberately not exercised until the local stack
 # works end to end, so hosting can never be blamed for a bug that is really in the app (D3).
 #
-# Note what is NOT here: a backup sidecar. A Render disk mounts to exactly one service, so no
-# second container can share the volume. The snapshot is taken inside the append transaction
-# instead, which is the stronger guarantee anyway (D4).
+# ## Paths, and why they are not `./Dockerfile`
+#
+# The application is a *subdirectory* of this repository, not its root -- the root holds only
+# `ZacoAgents_Chris/` and `.github/`. Render resolves `dockerfilePath` and `dockerContext` from the
+# **repo root**, and does so regardless of `rootDir`, so `./Dockerfile` finds nothing and the build
+# fails before it starts. They name the subdirectory instead.
+#
+# `dockerContext` decides two further things worth knowing. `.dockerignore` is read from the
+# context root, so the one at `ZacoAgents_Chris/.dockerignore` is the one that applies -- and the
+# `COPY` lines in the Dockerfile are relative to the context, which is why they say `zaco` rather
+# than `ZacoAgents_Chris/zaco`.
+#
+# `rootDir` is separate from both: it only decides which changes trigger a build. Everything this
+# service is built from lives under it, so a commit touching nothing but the repo-root CI workflow
+# does not redeploy the app.
+#
+# ## Where this file has to be
+#
+# Render looks for a blueprint at the repository root by default, and this one is not there. Point
+# it at `ZacoAgents_Chris/render.yaml` when creating the Blueprint, or move this file to the root
+# -- the paths above are written from the root either way, so they do not change if it moves.
+#
+# ## Note what is NOT here
+#
+# A backup sidecar. A Render disk mounts to exactly one service, so no second container can share
+# the volume. The snapshot is taken inside the append transaction instead, which is the stronger
+# guarantee anyway (D4).
 
 services:
   - type: web
     name: zaco
     runtime: docker
-    dockerfilePath: ./Dockerfile
-    dockerContext: .
+    rootDir: ZacoAgents_Chris
+    dockerfilePath: ./ZacoAgents_Chris/Dockerfile
+    dockerContext: ./ZacoAgents_Chris
     plan: starter
     healthCheckPath: /api/health
     disk:
@@ -30,6 +55,9 @@ services:
         value: "50"
       - key: SECRET_KEY
         generateValue: true
+      # Not synced: these seed the first account, and the password is a real credential. Set both
+      # in the dashboard before the first deploy -- the account is seeded only on an empty
+      # database, so a default left in place is the one that stays.
       - key: ADMIN_EMAIL
         sync: false
       - key: ADMIN_PASSWORD

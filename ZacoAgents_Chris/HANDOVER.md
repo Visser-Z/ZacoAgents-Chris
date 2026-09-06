@@ -105,9 +105,10 @@ zaco/
   resolve/    dn.py, book.py, stock.py, queue.py, service.py  (service.py ties DB + build + queue)
   workbook/   locate.py (headers), append.py (the write), snapshot.py (versions, D4)
   api/        routes_* + schemas.py + render.py
-  web/        Jinja templates, thin clients over /api/*
-  db/         models.py + migrations/versions/0001..0004
-tests/        431 tests
+  web/        spa/ -- the built React bundle, served at / (gitignored build artefact)
+  db/         models.py + migrations/versions/0001..0006
+frontend/     the React interface: Vite + TypeScript, built into the image
+tests/        561 tests
 PersonalTest/ hand-made documents for trying the system by hand; see its README
 ```
 
@@ -121,11 +122,12 @@ PersonalTest/ hand-made documents for trying the system by hand; see its README
 | 3 — resolution queue (§7) | done |
 | 3.5 — taking a document back out | done |
 | 4 — the workbook (§5) | done; the page draws the book itself since 2026-09-04 |
-| 4.5 — promote to Render | not started; needs Chris's Render account |
+| 4.5 — promote to Render | **in progress**; render.yaml corrected, deploy needs Chris's Render account |
 | 5 — reconciliation, Nett, settlement (§8) | done |
 | 6 — reporting (§9) | done |
 | 7 — agent conduct (§10) | done |
-| 8 — process both rounds, commit the book, write NOTES.md, open the PR | not started |
+| 8 — process both rounds, commit the book, write NOTES.md | done 2026-09-05; the PR is deliberately not open |
+| the React port (its own 8-step plan) | done 2026-09-06; the Jinja interface is removed |
 
 ## Open items, most important first
 
@@ -157,13 +159,19 @@ Tell him to put rounds 1 and 2 aside (Resolution queue → *Put the round aside*
 and upload all five at once. Expected then: 5 deliveries, 5 rows, R8,025.00, 12 open questions.
 **Do not do it for him without asking — they are his rounds.**
 
-### 3. Hosting is written and unexercised
+### 3. Hosting is in progress
 
-`render.yaml` exists; Phase 4.5 has never run. It needs Chris's own Render account, so it cannot
-be done for him. The one thing that will not be free when a separate-origin frontend arrives: auth
-is a session cookie and the pages use `credentials: "same-origin"`. A separate origin needs
-`credentials: "include"`, `allow_credentials` on the CORS config and `SameSite=None; Secure`, or a
-token flow instead.
+**This is what Chris is working on now.** `render.yaml` exists and its Docker paths have been
+corrected — the application is a subdirectory of the repository, and Render resolves
+`dockerfilePath` and `dockerContext` from the repository *root* whatever `rootDir` says. Phase 4.5
+still needs Chris's own Render account, so the deploy itself cannot be done for him. The dated
+entry at the bottom of the session log has the detail.
+
+The separate-origin warning that used to sit here is now moot and worth recording as settled: the
+frontend is served by FastAPI from its own origin, so the session cookie stays `SameSite=lax`,
+`credentials: "same-origin"` is correct, and no CORS or CSRF layer was ever needed. A future
+separate-origin client would still need `credentials: "include"`, `allow_credentials`,
+`SameSite=None; Secure` or a token flow — but nothing here depends on that.
 
 ### 4. The pull request is deliberately not open
 
@@ -580,3 +588,83 @@ destroyed it: the row survived, and survived a full suite run afterwards.
 - **The pull request.** Not opened; Chris has not asked for it.
 - **The blank-Nett follow-up** from the Phase 8 entry above is still open, and is still the first
   thing worth building next.
+
+
+## 2026-09-06 (later) — Preparing for Render
+
+**Chris is deploying to Render now.** This is the live piece of work; treat anything below as the
+state he is working from rather than as finished history. Phase 4.5 has been the only open phase
+since Phase 8, and it was deliberately left until the local stack worked end to end so that hosting
+could never be blamed for a bug that was really in the application (D3).
+
+Nothing in the application changes between the two targets. What changed here is the description of
+how to host it, and one file that could not have been right until somebody tried.
+
+### The blocker, fixed before it could be hit
+
+`render.yaml` said `dockerfilePath: ./Dockerfile` and `dockerContext: .`. **Neither would have
+worked.** This application is a *subdirectory* of its repository — the root holds only
+`ZacoAgents_Chris/` and `.github/` — and Render resolves both of those from the **repository root,
+regardless of `rootDir`**. The build would have failed before it started, with no log to read.
+
+They now name the subdirectory, and `rootDir: ZacoAgents_Chris` was added alongside — it is a
+separate thing that only decides which commits trigger a build, so a change to the repo-root CI
+workflow no longer redeploys the app.
+
+`dockerContext` decides two further things that are easy to get wrong together: `.dockerignore` is
+read from the *context* root, and the Dockerfile's `COPY` lines are relative to it. Both are
+correct as long as the context is `ZacoAgents_Chris` and not the repo root.
+
+**One thing is still Chris's to do:** Render looks for a blueprint at the repository root by
+default, and this one is at `ZacoAgents_Chris/render.yaml`. Either point Render at that path when
+creating the Blueprint, or move the file to the root — the paths inside are written from the root
+either way, so they survive the move. It was not moved here because that is a change to the
+repository root, and the root is not this project's to rearrange unasked.
+
+### `.dockerignore` rewritten
+
+The build context is now **1.5 MB of the 339 MB on disk**, and the file is organised by *why*
+something is excluded rather than as one list, because the reasons are not the same:
+
+- 335 MB of local tooling (`.venv` alone is 181 MB, `node_modules` 136 MB, `.mypy_cache` 18 MB).
+- `.env` and `.env.*`, which are local by design (D3). One baked into an image would silently win
+  over the hosted environment.
+- `zaco/web/spa/`, `frontend/dist/`, `*.tsbuildinfo` — build artefacts that must be made by the
+  `frontend` stage. Shipping a laptop's bundle is how the image and the repository stop agreeing.
+- `tests/`, `PersonalTest/`, `data/`, `docs/`, `*.md`, `docker/`, `docker-compose.yml`,
+  `render.yaml`, `workbook/template.xlsx` — not part of the running application and not `COPY`d.
+
+Verified by building the image with the new file and serving `/`, `/api/health` and `/admin` from
+it. Excluding something the image needed would not have been caught by the suite.
+
+**`lookup/` is the one that must never be excluded.** Without it the image runs with an empty set
+of product short codes and silently resolves nothing, which looks like a working system with more
+work to do.
+
+### Before the first deploy
+
+`ADMIN_EMAIL` and `ADMIN_PASSWORD` are `sync: false`, so the blueprint does not carry them and they
+must be set in the dashboard. The first account is seeded **only on an empty database** and an
+existing password is never reset, so a value left wrong is the one you are stuck with — the way out
+is `python -m zaco.recover`, which needs a shell on the server. Leave `SECRET_KEY` on
+`generateValue`; the app logs a warning while the shipped default is still in use.
+
+### Two corrections to earlier entries
+
+1. **There is CI**, at `.github/workflows/ci.yml` — repository root, `working-directory:
+   ZacoAgents_Chris`. It runs `ruff check`, `ruff format --check`, `mypy`, `alembic upgrade head`
+   and `pytest -q` on every push and pull request, against a Postgres service with `DATABASE_URL`
+   pointed at `zaco_test`. An earlier statement in this session that there was no CI was made after
+   looking only inside `ZacoAgents_Chris/`. Note it does **not** run `npm run build`, so the
+   `needs_build` tests — the SPA mount, and the one checking a reset link reaches a page — skip
+   there and are exercised only locally.
+2. **CI is safe from the truncation bug** described in the previous entry: it sets `DATABASE_URL`
+   explicitly to a `zaco_test` database, which the new guard accepts.
+
+### What is still true from the previous entry
+
+The development database still holds only fixture debris — one test round, a stray
+`operator@example.com`, and an admin whose password is the test fixture's `seeded-admin-password`
+rather than the documented `change-me-please`. **None of that reaches Render**, which starts from
+an empty managed Postgres and seeds from `ADMIN_EMAIL`/`ADMIN_PASSWORD`. The local mess and the
+hosted deploy are independent problems; the hosted one does not have to wait for the local one.

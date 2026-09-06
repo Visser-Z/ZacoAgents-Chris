@@ -108,16 +108,22 @@ running the suite must never destroy a staged round. The schema under test is bu
 by running the real migrations, not `create_all`, so a migration that has drifted from the
 models fails here rather than on a deploy.
 
+`.github/workflows/ci.yml` runs the same four commands on every push and pull request, with a
+Postgres service and `DATABASE_URL` pointed at `zaco_test`. It does **not** run `npm run build`,
+so the handful of tests marked `needs_build` -- the ones that check the SPA mount and that a reset
+link reaches a page -- skip there and are only exercised locally.
+
 In VS Code, the Test Explorer is already configured, and `.vscode/launch.json` has debug targets
 for the app and for pytest. `.vscode/extensions.json` lists the extensions to install; VS Code
 offers them when the folder is opened.
 
 ## Hosting
 
-Deliberately not exercised until the local stack works end to end, so hosting can never be
-blamed for a bug that is really in the application (D3). `render.yaml` describes a web service,
-a managed Postgres and a mounted disk. **No application code changes between the two targets** —
-only these environment variables:
+Deliberately not exercised until the local stack worked end to end, so hosting could never be
+blamed for a bug that is really in the application (D3). `render.yaml` describes a web service, a
+managed Postgres and a mounted disk.
+
+**No application code changes between the two targets** -- only these environment variables:
 
 | Variable | Local | Hosted |
 |---|---|---|
@@ -126,6 +132,66 @@ only these environment variables:
 | `SECRET_KEY` | shipped default, and the app says so | generated; must be real |
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | from `.env` | set in the environment group |
 | `ALLOWED_EMAIL_DOMAINS` | usually empty | optional; gates who may be **invited**, never an identity |
+
+### The application is not at the repository root
+
+This is the thing that will fail first, and it fails before the build starts, so there is no log
+to read. The repository root holds only `ZacoAgents_Chris/` and `.github/`. Render resolves
+`dockerfilePath` and `dockerContext` **from the repository root, regardless of `rootDir`**, so the
+obvious `./Dockerfile` finds nothing. `render.yaml` names the subdirectory:
+
+```yaml
+rootDir: ZacoAgents_Chris                        # only decides what triggers a build
+dockerfilePath: ./ZacoAgents_Chris/Dockerfile    # from the repo root
+dockerContext: ./ZacoAgents_Chris                # from the repo root
+```
+
+`dockerContext` also decides where `.dockerignore` is read from and what the Dockerfile's `COPY`
+lines are relative to -- which is why they say `zaco` and not `ZacoAgents_Chris/zaco`.
+
+Render looks for a blueprint at the repository root by default and this one is not there. Point it
+at `ZacoAgents_Chris/render.yaml` when creating the Blueprint, or move the file to the root; the
+paths inside are written from the root either way, so they survive the move.
+
+### Before the first deploy
+
+1. **Set `ADMIN_EMAIL` and `ADMIN_PASSWORD`** in the dashboard. They are `sync: false`, so the
+   blueprint does not carry them. The first account is seeded **only on an empty database** and an
+   existing password is never reset, so a value left wrong is the one you are stuck with -- see
+   *Forgotten passwords* below for the way out, which needs a shell on the server.
+2. **Leave `SECRET_KEY` to `generateValue`.** The shipped default is a known string; the app logs
+   a warning when it is still in use.
+3. Migrations run from `entrypoint.sh` on every boot, in both targets, so there is never a schema
+   version only one environment has seen.
+4. The disk is empty on the first deploy, so the app copies the seed workbook onto it once. It
+   never overwrites a book already there.
+
+### What is not uploaded
+
+`.dockerignore` sits at `ZacoAgents_Chris/` -- the context root -- and keeps the build context at
+roughly 1.5 MB out of the 339 MB on disk. Four groups, for four different reasons:
+
+| Excluded | Why |
+|---|---|
+| `.venv/`, `frontend/node_modules/`, `__pycache__/`, `.mypy_cache/`, `.pytest_cache/`, `.ruff_cache/`, `*.egg-info` | 335 MB of local tooling. Dependencies are installed inside the image. |
+| `.env`, `.env.*` | A **local** file. Hosted configuration comes from the environment (D3), and one baked into an image would silently win over it. |
+| `zaco/web/spa/`, `frontend/dist/`, `*.tsbuildinfo` | Build artefacts that must be made **by the `frontend` stage**, not copied from a laptop. Shipping a local build is how the image and the repository stop agreeing. |
+| `tests/`, `PersonalTest/`, `data/`, `docs/`, `*.md`, `docker/`, `docker-compose.yml`, `render.yaml`, `workbook/template.xlsx` | Not part of the running application; none of it is `COPY`d. Excluded so editing a document does not invalidate the build cache. |
+
+`data/` is the supplied agent reports -- the exercise's input and the suite's fixtures. The running
+system is handed documents through the interface and reads nothing from that directory. Of
+`workbook/`, only `account-sales-book.xlsx` is copied, as the seed for an empty disk.
+
+Everything the image needs is copied explicitly by the Dockerfile: `pyproject.toml`, `alembic.ini`,
+`migrations/`, `zaco/`, `lookup/`, `workbook/account-sales-book.xlsx`, `entrypoint.sh`, and the
+frontend bundle from the build stage. **`lookup/` is easy to miss** -- without it the image runs
+with an empty set of product short codes and silently resolves nothing, which looks like a working
+system with more work to do.
+
+### After it is up
+
+Check `/api/health` (the health check path), then sign in at the service URL and change the seeded
+password on your own account page. `/docs` serves the OpenAPI schema.
 
 ## Accounts
 
